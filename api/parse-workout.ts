@@ -186,14 +186,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[parse-workout] OK -', parsed.steps.length, 'steps, nombre:', parsed.name);
     return res.status(200).json(parsed);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Error desconocido';
-    console.error('[parse-workout] Error:', message);
+    const message = err instanceof Error ? err.message : String(err);
+    // Log completo para diagnóstico en Vercel → Functions → Logs
+    console.error('[parse-workout] Error completo:', JSON.stringify(err, null, 2));
+    console.error('[parse-workout] Mensaje:', message);
 
     if (message.includes('API_KEY_INVALID') || message.includes('401') || message.includes('403')) {
       return res.status(500).json({ error: 'API key de Gemini inválida. Verificá GEMINI_API_KEY en Vercel.' });
     }
-    if (message.includes('429') || message.toLowerCase().includes('quota')) {
-      return res.status(500).json({ error: 'Límite de Gemini alcanzado (1500/día). Intentá en unos minutos.' });
+    if (message.includes('429') || message.toLowerCase().includes('quota') || message.toLowerCase().includes('rate')) {
+      // Distinguir límite por minuto vs diario
+      const isPerMinute = message.toLowerCase().includes('per_minute') || message.toLowerCase().includes('rate_limit_exceeded');
+      if (isPerMinute) {
+        return res.status(429).json({ error: 'Demasiadas solicitudes por minuto (límite: 15/min). Esperá 30 segundos e intentá de nuevo.' });
+      }
+      return res.status(429).json({ error: 'Cuota de Gemini agotada. Podés crear una nueva API key gratis en aistudio.google.com.' });
     }
     return res.status(500).json({ error: 'Error del servidor: ' + message });
   }
