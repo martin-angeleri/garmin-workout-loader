@@ -160,48 +160,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'El texto es demasiado largo (máx. 4000 caracteres).' });
   }
 
-  try {
-    console.log('[parse-workout] Llamando a Gemini, texto:', text.length, 'chars');
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.0-flash',
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: WORKOUT_SCHEMA as Schema,
+    },
+  });
+  const prompt = SYSTEM_PROMPT + '\n\nEntrenamiento a convertir:\n' + text.trim();
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: WORKOUT_SCHEMA as Schema,
-      },
-    });
+  // Retry automático ante rate-limit (máx 2 reintentos, 6s entre cada uno)
+  const isRateLimit = (msg: string) =>
+    msg.includes('429') ||
+    msg.toLowerCase().includes('quota') ||
+    msg.toLowerCase().includes('rate') ||
+    msg.toLowerCase().includes('resource_exhausted');
 
-    const result = await model.generateContent(
-      SYSTEM_PROMPT + '\n\nEntrenamiento a convertir:\n' + text.trim()
-    );
-    const content = result.response.text();
-
-    if (!content) {
-      return res.status(500).json({ error: 'La IA no devolvió respuesta.' });
-    }
-
-    const raw = JSON.parse(content) as { name: string; steps: FlatStep[] };
-    const parsed = flatToInternal(raw);
-    console.log('[parse-workout] OK -', parsed.steps.length, 'steps, nombre:', parsed.name);
-    return res.status(200).json(parsed);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    // Log completo para diagnóstico en Vercel → Functions → Logs
-    console.error('[parse-workout] Error completo:', JSON.stringify(err, null, 2));
-    console.error('[parse-workout] Mensaje:', message);
-
-    if (message.includes('API_KEY_INVALID') || message.includes('401') || message.includes('403')) {
-      return res.status(500).json({ error: 'API key de Gemini inválida. Verificá GEMINI_API_KEY en Vercel.' });
-    }
-    if (message.includes('429') || message.toLowerCase().includes('quota') || message.toLowerCase().includes('rate')) {
-      // Distinguir límite por minuto vs diario
-      const isPerMinute = message.toLowerCase().includes('per_minute') || message.toLowerCase().includes('rate_limit_exceeded');
-      if (isPerMinute) {
-        return res.status(429).json({ error: 'Demasiadas solicitudes por minuto (límite: 15/min). Esperá 30 segundos e intentá de nuevo.' });
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`[parse-workout] Reintento ${attempt} tras rate-limit, esperando ${attempt * 6}s...`);
+        await new Promise(r => setTimeout(r, attempt * 6000));
+      } else {
+        console.log('[parse-workout] Llamando a Gemini, texto:', text.length, 'chars');
       }
-      return res.status(429).json({ error: 'Cuota de Gemini agotada. Podés crear una nueva API key gratis en aistudio.google.com.' });
+
+      const result = await model.generateContent(prompt);
+      const content = result.response.text();
+      if (!content) return res.status(500).json({ error: 'La IA no devolvió respuesta.' });
+
+      const raw = JSON.parse(content) as { name: string; steps: FlatStep[] };
+      const parsed = flatToInternal(raw);
+      console.log('[parse-workout] OK -', parsed.steps.length, 'steps, nombre:', parsed.name);
+      return res.status(200).json(parsed);
+    } catch (err: unknown) {
+      lastError = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[parse-workout] Intento ${attempt + 1} falló:`, msg);
+      if (!isRateLimit(msg)) break; // No reintentar errores que no sean de rate-limit
     }
-    return res.status(500).json({ error: 'Error del servidor: ' + message });
   }
+
+  // Todos los intentos fallaron
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  console.error('[parse-workout] Error final:', message);
+
+  if (message.includes('API_KEY_INVALID') || message.includes('401') || message.includes('403')) {
+    return res.status(500).json({ error: 'API key de Gemini inválida. Verificá GEMINI_API_KEY en Vercel.' });
+  }
+  if (isRateLimit(message)) {
+    return res.status(429).json({ error: 'Gemini está con mucho tráfico (límite por minuto). Intentá de nuevo en 1 minuto.' });
+  }
+  return res.status(500).json({ error: 'Error del servidor: ' + message });
 }
