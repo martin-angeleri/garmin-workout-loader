@@ -2,8 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import type { ParsedWorkout, ParsedStep, ParsedRepeatGroup, StepTypeKey, EndConditionKey, TargetTypeKey } from '../src/types/workout';
 
-// ─── OpenAI client (API key from env, never exposed to client) ─────────────────
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// ─── OpenAI client — inicializado en cada request para capturar errores ────────
+// (no en module scope, para evitar crash en arranque si falta la env var)
 
 // ─── Flat schema compatible with OpenAI strict mode (no oneOf at item level) ──
 // Each step has ALL fields; type='repeat' uses numberOfIterations + repeatSteps,
@@ -132,8 +132,20 @@ function flatToInternal(flat: { name: string; steps: FlatStep[] }): ParsedWorkou
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS para desarrollo local
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error('[parse-workout] OPENAI_API_KEY no está definida');
+    return res.status(500).json({ error: 'OPENAI_API_KEY no configurada en el servidor. Revisá la configuración de Vercel.' });
   }
 
   const { text } = req.body ?? {};
@@ -144,11 +156,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'El texto es demasiado largo (máx. 4000 caracteres).' });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY no configurada en el servidor. Revisá la configuración de Vercel.' });
-  }
+  const openai = new OpenAI({ apiKey });
 
   try {
+    console.log('[parse-workout] Llamando a OpenAI con texto de', text.length, 'caracteres');
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-2024-08-06',
       messages: [
@@ -169,9 +180,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
+      console.error('[parse-workout] OpenAI devolvió content vacío');
       return res.status(500).json({ error: 'La IA no devolvió respuesta.' });
     }
 
+    console.log('[parse-workout] Respuesta recibida OK, parseando JSON');
     const raw = JSON.parse(content) as { name: string; steps: FlatStep[] };
     const parsed = flatToInternal(raw);
     return res.status(200).json(parsed);
@@ -182,6 +195,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (message.includes('API key') || message.includes('Incorrect API key') || message.includes('401')) {
       return res.status(500).json({ error: 'API key de OpenAI inválida. Verificá la variable OPENAI_API_KEY en Vercel.' });
     }
-    return res.status(500).json({ error: 'No se pudo interpretar el entrenamiento. Revisá el texto e intentá de nuevo.' });
+    // Devolver el mensaje real del error para facilitar el diagnóstico
+    return res.status(500).json({ error: `Error del servidor: ${message}` });
   }
 }
