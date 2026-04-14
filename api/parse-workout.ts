@@ -1,89 +1,90 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import OpenAI from 'openai';
-import type { ParsedWorkout, ParsedStep, ParsedRepeatGroup, StepTypeKey, EndConditionKey, TargetTypeKey } from '../src/types/workout';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import type { Schema } from '@google/generative-ai';
+import type {
+  ParsedWorkout,
+  ParsedStep,
+  ParsedRepeatGroup,
+  StepTypeKey,
+  EndConditionKey,
+  TargetTypeKey,
+} from '../src/types/workout';
 
-// ─── OpenAI client — inicializado en cada request para capturar errores ────────
-// (no en module scope, para evitar crash en arranque si falta la env var)
+// ─── Gemini response schema ───────────────────────────────────────────────────
 
-// ─── Flat schema compatible with OpenAI strict mode (no oneOf at item level) ──
-// Each step has ALL fields; type='repeat' uses numberOfIterations + repeatSteps,
-// type='step' uses the individual step fields. anyOf IS supported in strict mode.
-const NULLABLE_NUMBER = { anyOf: [{ type: 'number' }, { type: 'null' }] };
-const NULLABLE_INTEGER = { anyOf: [{ type: 'integer' }, { type: 'null' }] };
-
-const INNER_STEP_PROPS = {
-  stepType: { type: 'string', enum: ['warmup', 'cooldown', 'interval', 'recovery', 'rest', 'other'] },
-  description: { type: 'string' },
-  endCondition: { type: 'string', enum: ['time', 'distance', 'lap.button'] },
-  endConditionValue: NULLABLE_NUMBER,
-  targetType: { type: 'string', enum: ['no.target', 'heart.rate.zone', 'speed.zone'] },
-  targetValueOne: NULLABLE_NUMBER,
-  targetValueTwo: NULLABLE_NUMBER,
+const INNER_STEP_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    stepType:          { type: SchemaType.STRING, enum: ['warmup','cooldown','interval','recovery','rest','other'] },
+    description:       { type: SchemaType.STRING },
+    endCondition:      { type: SchemaType.STRING, enum: ['time','distance','lap.button'] },
+    endConditionValue: { type: SchemaType.NUMBER, nullable: true },
+    targetType:        { type: SchemaType.STRING, enum: ['no.target','heart.rate.zone','speed.zone'] },
+    targetValueOne:    { type: SchemaType.NUMBER, nullable: true },
+    targetValueTwo:    { type: SchemaType.NUMBER, nullable: true },
+  },
+  required: ['stepType','description','endCondition','endConditionValue','targetType','targetValueOne','targetValueTwo'],
 };
 
-const INNER_STEP_REQUIRED = [
-  'stepType', 'description', 'endCondition', 'endConditionValue',
-  'targetType', 'targetValueOne', 'targetValueTwo',
-];
-
 const WORKOUT_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['name', 'steps'],
+  type: SchemaType.OBJECT,
   properties: {
-    name: { type: 'string' },
+    name: { type: SchemaType.STRING },
     steps: {
-      type: 'array',
+      type: SchemaType.ARRAY,
       items: {
-        type: 'object',
-        additionalProperties: false,
-        // ALL fields required so strict mode is satisfied; unused ones set to null / []
-        required: [
-          'type', 'stepType', 'description',
-          'endCondition', 'endConditionValue',
-          'targetType', 'targetValueOne', 'targetValueTwo',
-          'numberOfIterations', 'repeatSteps',
-        ],
+        type: SchemaType.OBJECT,
         properties: {
-          type: { type: 'string', enum: ['step', 'repeat'] },
-          ...INNER_STEP_PROPS,
-          numberOfIterations: NULLABLE_INTEGER,
-          repeatSteps: {
-            type: 'array',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              required: INNER_STEP_REQUIRED,
-              properties: INNER_STEP_PROPS,
-            },
-          },
+          type:               { type: SchemaType.STRING, enum: ['step','repeat'] },
+          stepType:           { type: SchemaType.STRING, enum: ['warmup','cooldown','interval','recovery','rest','other'] },
+          description:        { type: SchemaType.STRING },
+          endCondition:       { type: SchemaType.STRING, enum: ['time','distance','lap.button'] },
+          endConditionValue:  { type: SchemaType.NUMBER, nullable: true },
+          targetType:         { type: SchemaType.STRING, enum: ['no.target','heart.rate.zone','speed.zone'] },
+          targetValueOne:     { type: SchemaType.NUMBER, nullable: true },
+          targetValueTwo:     { type: SchemaType.NUMBER, nullable: true },
+          numberOfIterations: { type: SchemaType.INTEGER, nullable: true },
+          repeatSteps:        { type: SchemaType.ARRAY, items: INNER_STEP_SCHEMA },
         },
+        required: [
+          'type','stepType','description','endCondition','endConditionValue',
+          'targetType','targetValueOne','targetValueTwo','numberOfIterations','repeatSteps',
+        ],
       },
     },
   },
-} as const;
+  required: ['name','steps'],
+};
 
-const SYSTEM_PROMPT = `Sos un experto en planificación de entrenamientos de carrera. Tu tarea es convertir la descripción de un entrenamiento escrito en español informal a un JSON estructurado compatible con el formato de workout de Garmin Connect.
+// ─── System prompt ────────────────────────────────────────────────────────────
 
-IMPORTANTE: El JSON tiene una estructura plana. Cada elemento de "steps" puede ser:
-- type="step": un paso individual (numberOfIterations=null, repeatSteps=[])
-- type="repeat": un grupo de repeticiones (numberOfIterations=N, repeatSteps=[array de pasos])
+const SYSTEM_PROMPT = `Sos un experto en planificación de entrenamientos de carrera a pie.
+Convertí la descripción informal en español a un JSON para Garmin Connect, siguiendo estas reglas:
 
-Reglas de conversión:
-- "E/calor", "entrada en calor", "calentamiento": stepType = "warmup"
-- "Reg", "vuelta a la calma", "enfriamiento": stepType = "cooldown"
-- Intervalos de esfuerzo, runs progresivos, tiradas: stepType = "interval"
-- Pausa, recuperación entre series: stepType = "recovery" (dentro de repeatSteps)
-- "suaves", "fácil", "footing": targetType = "no.target"
-- Si hay "al 80%", "al 85%": targetType = "heart.rate.zone", max FC ~185: 80%=148-152bpm, 85%=157-162bpm
-- Si hay series repetidas (ej: "10 x 400m"): type="repeat" con numberOfIterations=10 y repeatSteps=[intervalo, recovery]
-- Distancias: siempre en METROS (1km=1000, 2.5km=2500, "2,5km"=2500)
-- Tiempos: siempre en SEGUNDOS (15min=900, 1:30=90, 1,30=90, 50s=50)
-- Nombre descriptivo y conciso (ej: "10x400m Progresivos", "Fartlek 3x8min")
-- description de cada paso: español, corto y claro
-- Para pasos simples (type="step"): numberOfIterations=null, repeatSteps=[]`;
+TIPOS DE PASO (stepType):
+- E/calor, calentamiento → warmup
+- Reg, enfriamiento, vuelta a la calma → cooldown
+- Intervalos, tiradas de esfuerzo → interval
+- Pausa, recuperación entre series → recovery (dentro de repeatSteps)
 
-// ─── Convert flat OpenAI output → internal ParsedWorkout format ───────────────
+GRUPOS DE SERIES (type=repeat):
+- "10 x 400m" → type=repeat, numberOfIterations=10, repeatSteps=[paso interval + paso recovery]
+- Para pasos simples: type=step, numberOfIterations=null, repeatSteps=[]
+
+UNIDADES:
+- Distancias en METROS: 1km=1000, 2,5km=2500, 400m=400
+- Tiempos en SEGUNDOS: 15min=900, 1:30=90, 1,30=90, 50s=50
+
+TARGETS:
+- "suaves", "fácil", sin intensidad → targetType=no.target, targetValueOne=null, targetValueTwo=null
+- "al 80%" → targetType=heart.rate.zone, targetValueOne=148, targetValueTwo=152
+- "al 85%" → targetType=heart.rate.zone, targetValueOne=157, targetValueTwo=162
+
+NOMBRE: descriptivo, conciso, en español (ej: "10x400m Progresivos", "Fartlek 3x8min")
+DESCRIPTION de cada paso: una frase corta en español`;
+
+// ─── Convert flat Gemini output → internal ParsedWorkout ─────────────────────
+
 interface FlatStep {
   type: 'step' | 'repeat';
   stepType: StepTypeKey;
@@ -131,8 +132,9 @@ function flatToInternal(flat: { name: string; steps: FlatStep[] }): ParsedWorkou
   };
 }
 
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS para desarrollo local
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -142,10 +144,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.error('[parse-workout] OPENAI_API_KEY no está definida');
-    return res.status(500).json({ error: 'OPENAI_API_KEY no configurada en el servidor. Revisá la configuración de Vercel.' });
+    console.error('[parse-workout] GEMINI_API_KEY no está definida');
+    return res.status(500).json({
+      error: 'GEMINI_API_KEY no configurada en el servidor. Añadila en Vercel → Settings → Environment Variables.',
+    });
   }
 
   const { text } = req.body ?? {};
@@ -156,46 +160,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'El texto es demasiado largo (máx. 4000 caracteres).' });
   }
 
-  const openai = new OpenAI({ apiKey });
-
   try {
-    console.log('[parse-workout] Llamando a OpenAI con texto de', text.length, 'caracteres');
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-2024-08-06',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: text.trim() },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'parsed_workout',
-          strict: true,
-          schema: WORKOUT_SCHEMA as unknown as Record<string, unknown>,
-        },
+    console.log('[parse-workout] Llamando a Gemini, texto:', text.length, 'chars');
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: WORKOUT_SCHEMA as Schema,
       },
-      max_tokens: 2000,
-      temperature: 0.2,
     });
 
-    const content = response.choices[0]?.message?.content;
+    const result = await model.generateContent(
+      SYSTEM_PROMPT + '\n\nEntrenamiento a convertir:\n' + text.trim()
+    );
+    const content = result.response.text();
+
     if (!content) {
-      console.error('[parse-workout] OpenAI devolvió content vacío');
       return res.status(500).json({ error: 'La IA no devolvió respuesta.' });
     }
 
-    console.log('[parse-workout] Respuesta recibida OK, parseando JSON');
     const raw = JSON.parse(content) as { name: string; steps: FlatStep[] };
     const parsed = flatToInternal(raw);
+    console.log('[parse-workout] OK -', parsed.steps.length, 'steps, nombre:', parsed.name);
     return res.status(200).json(parsed);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error desconocido';
     console.error('[parse-workout] Error:', message);
-    // Surface a more specific message when possible
-    if (message.includes('API key') || message.includes('Incorrect API key') || message.includes('401')) {
-      return res.status(500).json({ error: 'API key de OpenAI inválida. Verificá la variable OPENAI_API_KEY en Vercel.' });
+
+    if (message.includes('API_KEY_INVALID') || message.includes('401') || message.includes('403')) {
+      return res.status(500).json({ error: 'API key de Gemini inválida. Verificá GEMINI_API_KEY en Vercel.' });
     }
-    // Devolver el mensaje real del error para facilitar el diagnóstico
-    return res.status(500).json({ error: `Error del servidor: ${message}` });
+    if (message.includes('429') || message.toLowerCase().includes('quota')) {
+      return res.status(500).json({ error: 'Límite de Gemini alcanzado (1500/día). Intentá en unos minutos.' });
+    }
+    return res.status(500).json({ error: 'Error del servidor: ' + message });
   }
 }
