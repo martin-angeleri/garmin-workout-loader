@@ -1,5 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import GarminConnect from 'garmin-connect';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { GarminConnect } = require('garmin-connect') as { GarminConnect: new (opts: { username: string; password: string }) => {
+  login(email: string, password: string): Promise<void>;
+  addWorkout(workout: unknown): Promise<unknown>;
+} };
 
 import type {
   ParsedWorkout,
@@ -119,11 +123,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Contraseña requerida.' });
   }
 
-  let gc: InstanceType<typeof GarminConnect>;
+  type GarminClient = { login(email: string, password: string): Promise<void>; addWorkout(workout: unknown): Promise<unknown> };
+  let gc: GarminClient;
   try {
-    // @ts-ignore — garmin-connect default export varies by version
-    const GC = (GarminConnect as unknown as { default?: typeof GarminConnect }).default ?? GarminConnect;
-    gc = new GC({ username: email, password });
+    gc = new GarminConnect({ username: email, password });
   } catch {
     return res.status(500).json({ error: 'No se pudo inicializar el cliente de Garmin Connect.' });
   }
