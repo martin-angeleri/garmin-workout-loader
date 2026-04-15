@@ -81,6 +81,41 @@ export default function App() {
     setErrorMessage('');
   };
 
+  const TEST_WORKOUT = {
+    name: 'TEST 5x1km',
+    steps: [
+      { type: 'step', stepType: 'warmup', description: 'Entrada en calor', endCondition: 'time', endConditionValue: 600, targetType: 'no.target', targetValueOne: null, targetValueTwo: null },
+      { type: 'repeat', numberOfIterations: 5, steps: [
+        { type: 'step', stepType: 'interval', description: '1km al 85%', endCondition: 'distance', endConditionValue: 1000, targetType: 'heart.rate.zone', targetValueOne: 152, targetValueTwo: 171, },
+        { type: 'step', stepType: 'recovery', description: 'Recuperación', endCondition: 'time', endConditionValue: 90, targetType: 'no.target', targetValueOne: null, targetValueTwo: null },
+      ]},
+      { type: 'step', stepType: 'cooldown', description: 'Vuelta a la calma', endCondition: 'time', endConditionValue: 300, targetType: 'no.target', targetValueOne: null, targetValueTwo: null },
+    ],
+  };
+
+  const handleTestUpload = async () => {
+    if (!credentials) return;
+    setStatus('uploading');
+    setErrorMessage('');
+    try {
+      const res = await fetch('/api/upload-workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workout: TEST_WORKOUT, email: credentials.email, password: credentials.password }),
+      });
+      const rawText = await res.text();
+      console.log('[TEST] status:', res.status, 'body:', rawText.slice(0, 500));
+      let data: Record<string, unknown>;
+      try { data = JSON.parse(rawText); } catch { setErrorMessage(`[TEST] no-JSON (${res.status}): ${rawText.slice(0, 300)}`); setStatus('error'); return; }
+      if (!res.ok) { setErrorMessage(`[TEST] Error ${res.status}: ${String(data.error)}`); setStatus('error'); return; }
+      setUploadResult(data as unknown as UploadResult);
+      setStatus('success');
+    } catch (err: unknown) {
+      setErrorMessage(`[TEST] ${err instanceof Error ? err.message : 'Error inesperado'}`);
+      setStatus('error');
+    }
+  };
+
   if (showSetup) {
     return (
       <CredentialsSetup
@@ -158,6 +193,16 @@ export default function App() {
 
         {(status === 'idle' || status === 'parsing' || status === 'error') && (
           <WorkoutInput onParse={handleParse} loading={status === 'parsing'} />
+        )}
+
+        {status === 'idle' && isConfigured && (
+          <button
+            onClick={handleTestUpload}
+            className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold"
+            style={{ background: 'rgba(200,255,0,0.12)', color: '#C8FF00', border: '1px solid rgba(200,255,0,0.3)' }}
+          >
+            🧪 TEST: Subir workout hardcodeado a Garmin
+          </button>
         )}
 
         {(status === 'parsed' || status === 'uploading') && parsedWorkout && (
