@@ -1,15 +1,65 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, randomBytes } from 'crypto';
-import type {
-  ParsedWorkout,
-  ParsedStep,
-  ParsedRepeatGroup,
-  GarminWorkout,
-  GarminExecutableStep,
-  GarminRepeatGroup,
-  GarminWorkoutStep,
-} from '../src/types/workout';
-import { STEP_TYPE_IDS, END_CONDITION_IDS, TARGET_TYPE_IDS } from '../src/types/workout';
+
+// ─── Types & constants (inlined to avoid cross-bundle import issues in Vercel) ─
+
+type StepTypeKey = 'warmup' | 'cooldown' | 'interval' | 'recovery' | 'rest' | 'other';
+type EndConditionKey = 'lap.button' | 'time' | 'distance';
+type TargetTypeKey = 'no.target' | 'heart.rate.zone' | 'speed.zone';
+
+const STEP_TYPE_IDS: Record<StepTypeKey, number> = {
+  warmup: 1, cooldown: 2, interval: 3, recovery: 4, rest: 5, other: 7,
+};
+const END_CONDITION_IDS: Record<EndConditionKey, number> = {
+  'lap.button': 1, time: 2, distance: 3,
+};
+const TARGET_TYPE_IDS: Record<TargetTypeKey, number> = {
+  'no.target': 1, 'heart.rate.zone': 4, 'speed.zone': 6,
+};
+
+interface ParsedStep {
+  type: 'step';
+  stepType: StepTypeKey;
+  description: string;
+  endCondition: EndConditionKey;
+  endConditionValue: number | null;
+  targetType: TargetTypeKey;
+  targetValueOne: number | null;
+  targetValueTwo: number | null;
+}
+interface ParsedRepeatGroup {
+  type: 'repeat';
+  numberOfIterations: number;
+  steps: ParsedStep[];
+}
+interface ParsedWorkout {
+  name: string;
+  steps: (ParsedStep | ParsedRepeatGroup)[];
+}
+interface GarminExecutableStep {
+  type: 'ExecutableStepDTO';
+  stepId: null; stepOrder: number; childStepId: null;
+  description: string;
+  stepType: { stepTypeId: number; stepTypeKey: StepTypeKey };
+  endCondition: { conditionTypeId: number; conditionTypeKey: EndConditionKey };
+  preferredEndConditionUnit: { unitKey: 'second' | 'meter' };
+  endConditionValue: number | null;
+  endConditionCompare: null; endConditionZone: null;
+  targetType: { workoutTargetTypeId: number; workoutTargetTypeKey: TargetTypeKey };
+  targetValueOne: number | null; targetValueTwo: number | null; zoneNumber: null;
+}
+interface GarminRepeatGroup {
+  type: 'RepeatGroupDTO';
+  stepId: null; stepOrder: number; childStepId: number;
+  numberOfIterations: number; smartRepeat: false;
+  workoutSteps: GarminExecutableStep[];
+}
+type GarminWorkoutStep = GarminExecutableStep | GarminRepeatGroup;
+interface GarminWorkout {
+  workoutId: null; workoutName: string; description: string;
+  sportType: { sportTypeId: 1; sportTypeKey: 'running' };
+  workoutSegments: [{ segmentOrder: 1; sportType: { sportTypeId: 1; sportTypeKey: 'running' }; workoutSteps: GarminWorkoutStep[] }];
+}
 
 // ─── Cookie jar ───────────────────────────────────────────────────────────────
 
