@@ -18,7 +18,7 @@ const STEP_LABELS: Record<string, string> = {
 const STEP_COLORS: Record<string, string> = {
   warmup: '#FF9500',
   cooldown: '#30D158',
-  interval: '#FF6900',
+  interval: '#E91E8C',
   recovery: '#0A84FF',
   rest: '#5E5CE6',
   other: '#888',
@@ -103,13 +103,13 @@ function StepCard({ step, isNested }: { step: ParsedStep; index?: number; isNest
 
 function RepeatGroupCard({ group }: { group: ParsedRepeatGroup; groupIndex?: number }) {
   return (
-    <div className="step-card rounded-xl overflow-hidden" style={{ border: '1.5px solid rgba(255,105,0,0.35)' }}>
+    <div className="step-card rounded-xl overflow-hidden" style={{ border: '1.5px solid rgba(233,30,140,0.35)' }}>
       <div className="flex items-center gap-2 px-4 py-2.5"
-           style={{ background: 'rgba(255,105,0,0.1)' }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="#FF6900">
+           style={{ background: 'rgba(233,30,140,0.1)' }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="#E91E8C">
           <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
         </svg>
-        <span className="text-sm font-bold" style={{ color: '#FF6900' }}>
+        <span className="text-sm font-bold" style={{ color: '#E91E8C' }}>
           {group.numberOfIterations} repeticiones
         </span>
       </div>
@@ -127,11 +127,12 @@ interface Props {
   onNameChange: (name: string) => void;
   onUpload: () => void;
   onBack: () => void;
+  onReparse: () => void;
   uploading: boolean;
   email: string;
 }
 
-export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack, uploading, email }: Props) {
+export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack, onReparse, uploading, email }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(workout.name);
 
@@ -160,10 +161,22 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
           Editar texto
         </button>
-        <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full"
-             style={{ background: 'rgba(48,209,88,0.1)', color: '#30D158', border: '1px solid rgba(48,209,88,0.2)' }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-          Interpretado correctamente
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onReparse}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all"
+            style={{ background: 'rgba(233,30,140,0.08)', color: '#E91E8C', border: '1px solid rgba(233,30,140,0.25)' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.18)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.08)'; }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+            Re-interpretar
+          </button>
+          <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full"
+               style={{ background: 'rgba(48,209,88,0.1)', color: '#30D158', border: '1px solid rgba(48,209,88,0.2)' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            Interpretado
+          </div>
         </div>
       </div>
 
@@ -176,13 +189,13 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
               value={nameInput}
               onChange={e => setNameInput(e.target.value)}
               className="flex-1 px-3 py-2 rounded-xl text-base font-bold"
-              style={{ background: '#0F0F10', border: '1.5px solid #FF6900', color: '#E8E8EA' }}
+              style={{ background: '#0F0F10', border: '1.5px solid #E91E8C', color: '#E8E8EA' }}
               onKeyDown={e => e.key === 'Enter' && saveNameEdit()}
               autoFocus
             />
             <button onClick={saveNameEdit}
                     className="px-4 py-2 rounded-xl text-sm font-semibold"
-                    style={{ background: '#FF6900', color: '#fff' }}>
+                    style={{ background: '#E91E8C', color: '#fff' }}>
               OK
             </button>
           </div>
@@ -209,7 +222,7 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
       {/* Steps */}
       <div className="space-y-2.5">
         <div className="flex items-center gap-2 mb-1">
-          <div className="w-1.5 h-5 rounded-full" style={{ background: '#C8FF00' }} />
+          <div className="w-1.5 h-5 rounded-full" style={{ background: '#E91E8C' }} />
           <h2 className="text-sm font-semibold" style={{ color: '#E8E8EA' }}>Pasos del entrenamiento</h2>
         </div>
         {workout.steps.map((step: ParsedWorkoutStep, i: number) =>
@@ -223,7 +236,7 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
       <div className="rounded-2xl p-5" style={{ background: '#141416', border: '1px solid #2A2A2C' }}>
         <div className="flex items-center gap-2 mb-4">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
-               style={{ background: 'rgba(255,105,0,0.15)', fontSize: '20px' }}>
+               style={{ background: 'rgba(233,30,140,0.15)', fontSize: '20px' }}>
             ⌚
           </div>
           <div>
@@ -237,7 +250,7 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
           disabled={uploading}
           className="w-full py-4 rounded-xl text-base font-bold transition-all flex items-center justify-center gap-2.5"
           style={{
-            background: uploading ? '#2A2A2C' : 'linear-gradient(135deg, #FF6900 0%, #FF9500 100%)',
+          background: uploading ? '#2A2A2C' : 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)',
             color: uploading ? '#555' : '#fff',
             cursor: uploading ? 'not-allowed' : 'pointer',
           }}

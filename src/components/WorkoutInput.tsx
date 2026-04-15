@@ -24,15 +24,16 @@ const EXAMPLES = [
 interface Props {
   onParse: (text: string) => void;
   loading: boolean;
+  value: string;
+  onChange: (text: string) => void;
 }
 
-export default function WorkoutInput({ onParse, loading }: Props) {
-  const [text, setText] = useState('');
+export default function WorkoutInput({ onParse, loading, value, onChange }: Props) {
   const [showExamples, setShowExamples] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (text.trim().length > 0) onParse(text.trim());
+    if (value.trim().length > 0) onParse(value.trim());
   };
 
   return (
@@ -40,7 +41,7 @@ export default function WorkoutInput({ onParse, loading }: Props) {
 
       {/* Section header */}
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-1.5 h-5 rounded-full" style={{ background: '#FF6900' }} />
+        <div className="w-1.5 h-5 rounded-full" style={{ background: '#E91E8C' }} />
         <h2 className="text-base font-semibold" style={{ color: '#E8E8EA' }}>
           Describí tu entrenamiento
         </h2>
@@ -53,8 +54,8 @@ export default function WorkoutInput({ onParse, loading }: Props) {
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="relative">
           <textarea
-            value={text}
-            onChange={e => setText(e.target.value)}
+            value={value}
+            onChange={e => onChange(e.target.value)}
             placeholder={`Ej:\n-E/calor: 15min suaves\n-10 x 400m progresivos terminando al 80%. Pausa de 50s\n-Reg: 15min suaves`}
             className="w-full px-5 py-4 rounded-2xl text-sm leading-relaxed font-mono transition-colors"
             style={{
@@ -65,11 +66,11 @@ export default function WorkoutInput({ onParse, loading }: Props) {
             }}
             disabled={loading}
             spellCheck={false}
-            onFocus={e => (e.target.style.borderColor = '#FF6900')}
+            onFocus={e => (e.target.style.borderColor = '#E91E8C')}
             onBlur={e => (e.target.style.borderColor = '#2E2E30')}
           />
           <div className="absolute bottom-3 right-4 text-xs" style={{ color: '#444' }}>
-            {text.length} caracteres
+            {value.length} caracteres
           </div>
         </div>
 
@@ -79,7 +80,7 @@ export default function WorkoutInput({ onParse, loading }: Props) {
           onClick={() => setShowExamples(v => !v)}
           className="flex items-center gap-1.5 text-sm transition-colors"
           style={{ color: '#666' }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#FF6900')}
+          onMouseEnter={e => (e.currentTarget.style.color = '#E91E8C')}
           onMouseLeave={e => (e.currentTarget.style.color = '#666')}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
@@ -95,14 +96,14 @@ export default function WorkoutInput({ onParse, loading }: Props) {
               <button
                 key={ex.label}
                 type="button"
-                onClick={() => { setText(ex.text); setShowExamples(false); }}
+                onClick={() => { onChange(ex.text); setShowExamples(false); }}
                 className="text-left p-4 rounded-xl transition-all group"
                 style={{ background: '#141416', border: '1px solid #2A2A2C' }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = '#FF6900')}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = '#E91E8C')}
                 onMouseLeave={e => (e.currentTarget.style.borderColor = '#2A2A2C')}
               >
                 <p className="text-xs font-semibold mb-1.5 transition-colors"
-                   style={{ color: '#FF6900' }}>
+                   style={{ color: '#E91E8C' }}>
                   {ex.label}
                 </p>
                 <pre className="text-xs whitespace-pre-wrap leading-relaxed" style={{ color: '#888', fontFamily: 'inherit' }}>
@@ -115,14 +116,14 @@ export default function WorkoutInput({ onParse, loading }: Props) {
 
         <button
           type="submit"
-          disabled={loading || text.trim().length === 0}
+          disabled={loading || value.trim().length === 0}
           className="w-full py-4 rounded-2xl text-base font-bold transition-all flex items-center justify-center gap-2.5"
           style={{
-            background: loading || text.trim().length === 0
+            background: loading || value.trim().length === 0
               ? '#2A2A2C'
-              : 'linear-gradient(135deg, #FF6900 0%, #FF9500 100%)',
-            color: loading || text.trim().length === 0 ? '#555' : '#fff',
-            cursor: loading || text.trim().length === 0 ? 'not-allowed' : 'pointer',
+              : 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)',
+            color: loading || value.trim().length === 0 ? '#555' : '#fff',
+            cursor: loading || value.trim().length === 0 ? 'not-allowed' : 'pointer',
           }}
         >
           {loading ? (

@@ -24,11 +24,11 @@ body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #1A1A1C; }
 ::-webkit-scrollbar-thumb { background: #3A3A3C; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #FF6900; }
+::-webkit-scrollbar-thumb:hover { background: #E91E8C; }
 
 /* Focus rings */
 *:focus-visible {
-  outline: 2px solid #FF6900;
+  outline: 2px solid #E91E8C;
   outline-offset: 2px;
 }
 
@@ -40,7 +40,7 @@ textarea {
 
 /* Gradient text utility */
 .gradient-text {
-  background: linear-gradient(135deg, #FF6900 0%, #C8FF00 100%);
+  background: linear-gradient(135deg, #E91E8C 0%, #FF4DB8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -55,9 +55,9 @@ textarea {
 .step-card { animation: slideIn 0.2s ease forwards; }
 
 /* Pulse animation for uploading state */
-@keyframes pulse-orange {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 105, 0, 0.4); }
-  50%       { box-shadow: 0 0 0 8px rgba(255, 105, 0, 0); }
+@keyframes pulse-pink {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(233, 30, 140, 0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(233, 30, 140, 0); }
 }
 
-.pulse-orange { animation: pulse-orange 1.5s ease infinite; }
+.pulse-pink { animation: pulse-pink 1.5s ease infinite; }

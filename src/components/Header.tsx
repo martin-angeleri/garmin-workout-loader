@@ -15,7 +15,7 @@ export default function Header({ email, onChangeAccount }: Props) {
       {/* Logo */}
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-             style={{ background: 'linear-gradient(135deg, #FF6900 0%, #FF9500 100%)' }}>
+             style={{ background: 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)' }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
             <path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/>
           </svg>
@@ -38,7 +38,7 @@ export default function Header({ email, onChangeAccount }: Props) {
           style={{ background: '#1A1A1C', border: '1px solid #2E2E30', color: '#AAAAAA' }}
         >
           <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-               style={{ background: 'rgba(255,105,0,0.2)', color: '#FF6900' }}>
+               style={{ background: 'rgba(233,30,140,0.2)', color: '#E91E8C' }}>
             {email.charAt(0).toUpperCase()}
           </div>
           <span className="hidden sm:block max-w-[160px] truncate">{email}</span>

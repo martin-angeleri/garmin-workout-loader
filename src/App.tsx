@@ -16,8 +16,10 @@ export default function App() {
   const [parsedWorkout, setParsedWorkout] = useState<ParsedWorkout | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [inputText, setInputText] = useState('');
 
   const handleParse = async (text: string) => {
+    setInputText(text);
     setStatus('parsing');
     setErrorMessage('');
     try {
@@ -79,6 +81,11 @@ export default function App() {
     setParsedWorkout(null);
     setUploadResult(null);
     setErrorMessage('');
+    // No limpiamos inputText para que el usuario pueda reutilizarlo
+  };
+
+  const handleReparse = () => {
+    if (inputText.trim()) handleParse(inputText);
   };
 
   const TEST_WORKOUT = {
@@ -154,9 +161,9 @@ export default function App() {
           <div className="text-center mb-10 max-w-2xl">
             <div
               className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold mb-4"
-              style={{ background: 'rgba(255,105,0,0.12)', color: '#FF6900', border: '1px solid rgba(255,105,0,0.25)' }}
+              style={{ background: 'rgba(233,30,140,0.12)', color: '#E91E8C', border: '1px solid rgba(233,30,140,0.25)' }}
             >
-              <span style={{ color: '#C8FF00' }}>✦</span> Powered by Groq + Garmin Connect
+              <span style={{ color: '#FF4DB8' }}>✦</span> Powered by Groq + Garmin Connect
             </div>
             <h1 className="text-4xl font-bold leading-tight mb-3" style={{ color: '#E8E8EA' }}>
               Cargá tu entrenamiento<br />
@@ -192,14 +199,19 @@ export default function App() {
         )}
 
         {(status === 'idle' || status === 'parsing' || status === 'error') && (
-          <WorkoutInput onParse={handleParse} loading={status === 'parsing'} />
+          <WorkoutInput
+            onParse={handleParse}
+            loading={status === 'parsing'}
+            value={inputText}
+            onChange={setInputText}
+          />
         )}
 
         {status === 'idle' && isConfigured && (
           <button
             onClick={handleTestUpload}
             className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold"
-            style={{ background: 'rgba(200,255,0,0.12)', color: '#C8FF00', border: '1px solid rgba(200,255,0,0.3)' }}
+            style={{ background: 'rgba(233,30,140,0.12)', color: '#E91E8C', border: '1px solid rgba(233,30,140,0.3)' }}
           >
             🧪 TEST: Subir workout hardcodeado a Garmin
           </button>
@@ -211,6 +223,7 @@ export default function App() {
             onNameChange={(name) => setParsedWorkout((prev) => (prev ? { ...prev, name } : prev))}
             onUpload={handleUpload}
             onBack={() => setStatus('idle')}
+            onReparse={handleReparse}
             uploading={status === 'uploading'}
             email={credentials?.email ?? ''}
           />
