@@ -50,13 +50,22 @@ export default function App() {
           password: credentials.password,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMessage(data.error ?? 'Error al subir el workout.');
+      let data: Record<string, unknown>;
+      try {
+        data = await res.json();
+      } catch {
+        const text = await res.text().catch(() => '');
+        console.error('[upload] respuesta no-JSON del servidor:', res.status, text);
+        setErrorMessage(`Error del servidor (${res.status}): ${text.slice(0, 120) || 'sin detalle'}`);
         setStatus('error');
         return;
       }
-      setUploadResult(data as UploadResult);
+      if (!res.ok) {
+        setErrorMessage(String(data.error ?? 'Error al subir el workout.'));
+        setStatus('error');
+        return;
+      }
+      setUploadResult(data as unknown as UploadResult);
       setStatus('success');
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error inesperado.');

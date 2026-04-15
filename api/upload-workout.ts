@@ -1,6 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { GarminConnect } = require('garmin-connect') as { GarminConnect: new (opts: { username: string; password: string }) => {
+let garminConnectModule: { GarminConnect: new (opts: { username: string; password: string }) => {
+  login(email: string, password: string): Promise<void>;
+  addWorkout(workout: unknown): Promise<unknown>;
+} };
+try {
+  garminConnectModule = require('garmin-connect');
+  console.log('[upload-workout] garmin-connect cargado OK');
+} catch (e) {
+  console.error('[upload-workout] FALLO al cargar garmin-connect:', e);
+  garminConnectModule = { GarminConnect: null as unknown as never };
+}
+const { GarminConnect } = garminConnectModule as { GarminConnect: new (opts: { username: string; password: string }) => {
   login(email: string, password: string): Promise<void>;
   addWorkout(workout: unknown): Promise<unknown>;
 } };
@@ -123,6 +134,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Contraseña requerida.' });
   }
 
+  if (!GarminConnect) {
+    return res.status(500).json({ error: 'El módulo garmin-connect no pudo cargarse en el servidor. Revisá los logs de Vercel.' });
+  }
   type GarminClient = { login(email: string, password: string): Promise<void>; addWorkout(workout: unknown): Promise<unknown> };
   let gc: GarminClient;
   try {
