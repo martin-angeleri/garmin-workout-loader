@@ -2,7 +2,6 @@
   "framework": "vite",
   "buildCommand": "vite build",
   "outputDirectory": "dist",
-  "nodeVersion": "20.x",
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
