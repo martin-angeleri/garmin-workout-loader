@@ -1,21 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-let garminConnectModule: { GarminConnect: new (opts: { username: string; password: string }) => {
-  login(email: string, password: string): Promise<void>;
-  addWorkout(workout: unknown): Promise<unknown>;
-} };
-try {
-  garminConnectModule = require('garmin-connect');
-  console.log('[upload-workout] garmin-connect cargado OK');
-} catch (e) {
-  console.error('[upload-workout] FALLO al cargar garmin-connect:', e);
-  garminConnectModule = { GarminConnect: null as unknown as never };
-}
-const { GarminConnect } = garminConnectModule as { GarminConnect: new (opts: { username: string; password: string }) => {
-  login(email: string, password: string): Promise<void>;
-  addWorkout(workout: unknown): Promise<unknown>;
-} };
-
+import { createHmac, randomBytes } from 'crypto';
 import type {
   ParsedWorkout,
   ParsedStep,
@@ -25,43 +9,200 @@ import type {
   GarminRepeatGroup,
   GarminWorkoutStep,
 } from '../src/types/workout';
+import { STEP_TYPE_IDS, END_CONDITION_IDS, TARGET_TYPE_IDS } from '../src/types/workout';
 
-import {
-  STEP_TYPE_IDS,
-  END_CONDITION_IDS,
-  TARGET_TYPE_IDS,
-} from '../src/types/workout';
+// ─── Cookie jar ───────────────────────────────────────────────────────────────
 
-// ─── Conversión ParsedWorkout → GarminWorkout ──────────────────────────────────
+type CookieJar = Map<string, string>;
+
+function extractSetCookies(headers: Headers): string[] {
+  const h = headers as unknown as { getSetCookie?: () => string[] };
+  if (typeof h.getSetCookie === 'function') return h.getSetCookie();
+  const raw = headers.get('set-cookie');
+  return raw ? [raw] : [];
+}
+
+function updateJar(jar: CookieJar, setCookies: string[]): void {
+  for (const c of setCookies) {
+    const nameVal = c.split(';')[0].trim();
+    const eq = nameVal.indexOf('=');
+    if (eq > 0) jar.set(nameVal.slice(0, eq), nameVal.slice(eq + 1));
+  }
+}
+
+function jarHeader(jar: CookieJar): string {
+  return Array.from(jar.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+}
+
+// ─── OAuth 1.0a helpers ───────────────────────────────────────────────────────
+
+function pct(s: string): string {
+  return encodeURIComponent(s)
+    .replace(/!/g, '%21').replace(/'/g, '%27')
+    .replace(/\(/g, '%28').replace(/\)/g, '%29').replace(/\*/g, '%2A');
+}
+
+function oauthBase(consumerKey: string, tokenKey?: string): Record<string, string> {
+  const p: Record<string, string> = {
+    oauth_consumer_key: consumerKey,
+    oauth_nonce: randomBytes(16).toString('hex'),
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: String(Math.floor(Date.now() / 1000)),
+    oauth_version: '1.0',
+  };
+  if (tokenKey) p.oauth_token = tokenKey;
+  return p;
+}
+
+function oauthSign(
+  method: string,
+  baseUrl: string,
+  allParams: Record<string, string>,
+  consumerSecret: string,
+  tokenSecret = ''
+): string {
+  const sorted = Object.keys(allParams)
+    .sort()
+    .map(k => `${pct(k)}=${pct(allParams[k])}`)
+    .join('&');
+  const sigBase = [method.toUpperCase(), pct(baseUrl), pct(sorted)].join('&');
+  const sigKey = `${pct(consumerSecret)}&${pct(tokenSecret)}`;
+  return createHmac('sha1', sigKey).update(sigBase).digest('base64');
+}
+
+function toAuthHeader(params: Record<string, string>): string {
+  return 'OAuth ' + Object.entries(params)
+    .map(([k, v]) => `${pct(k)}="${pct(v)}"`)
+    .join(', ');
+}
+
+// ─── Garmin Connect SSO + OAuth flow ─────────────────────────────────────────
+
+const SSO_EMBED  = 'https://sso.garmin.com/sso/embed';
+const SSO_SIGNIN = 'https://sso.garmin.com/sso/signin';
+const GC_MODERN  = 'https://connect.garmin.com/modern';
+const GC_API     = 'https://connectapi.garmin.com';
+const UA_MOBILE  = 'com.garmin.android.apps.connectmobile';
+const UA_BROWSER = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+async function garminGetBearerToken(email: string, password: string): Promise<string> {
+  const jar: CookieJar = new Map();
+
+  // Step 1: OAuth consumer keys (public S3 endpoint)
+  const consumerRes = await fetch('https://thegarth.s3.amazonaws.com/oauth_consumer.json');
+  if (!consumerRes.ok) throw new Error('No se pudieron obtener las claves OAuth de Garmin');
+  const { consumer_key, consumer_secret } = await consumerRes.json() as { consumer_key: string; consumer_secret: string };
+
+  // Step 2: Init SSO session
+  const r1 = await fetch(
+    `${SSO_EMBED}?clientId=GarminConnect&locale=en&service=${encodeURIComponent(GC_MODERN)}`,
+    { redirect: 'follow' }
+  );
+  updateJar(jar, extractSetCookies(r1.headers));
+
+  // Step 3: Get login page + CSRF token
+  const step2Qs = `id=gauth-widget&embedWidget=true&locale=en&gauthHost=${encodeURIComponent(SSO_EMBED)}`;
+  const r2 = await fetch(`${SSO_SIGNIN}?${step2Qs}`, {
+    headers: { Cookie: jarHeader(jar) },
+    redirect: 'follow',
+  });
+  updateJar(jar, extractSetCookies(r2.headers));
+  const html2 = await r2.text();
+
+  const csrfMatch = /name="_csrf"\s+value="([^"]+)"/.exec(html2)
+    ?? /value="([^"]+)"\s+name="_csrf"/.exec(html2);
+  if (!csrfMatch) throw new Error('CSRF token no encontrado en Garmin SSO');
+  const csrf = csrfMatch[1];
+
+  // Step 4: Submit credentials
+  const signinQsp = new URLSearchParams({
+    id: 'gauth-widget', embedWidget: 'true', clientId: 'GarminConnect',
+    locale: 'en', gauthHost: SSO_EMBED, service: SSO_EMBED, source: SSO_EMBED,
+    redirectAfterAccountLoginUrl: SSO_EMBED, redirectAfterAccountCreationUrl: SSO_EMBED,
+  });
+  const loginBody = new URLSearchParams({ username: email, password, embed: 'true', _csrf: csrf });
+  const r3 = await fetch(`${SSO_SIGNIN}?${signinQsp}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Cookie: jarHeader(jar),
+      Origin: 'https://sso.garmin.com',
+      Referer: `${SSO_SIGNIN}?${step2Qs}`,
+      'User-Agent': UA_BROWSER,
+    },
+    body: loginBody.toString(),
+    redirect: 'follow',
+  });
+  updateJar(jar, extractSetCookies(r3.headers));
+  const html3 = await r3.text();
+
+  if (/AccountLocked/i.test(html3)) throw new Error('Cuenta de Garmin bloqueada. Abrí connect.garmin.com para desbloquearla.');
+  if (/MFACode|verificationCode|two.factor/i.test(html3)) throw new Error('Garmin requiere verificación en dos pasos (MFA). Desactivala en connect.garmin.com.');
+
+  const ticketMatch = /ticket=([^"&\s]+)/.exec(html3);
+  if (!ticketMatch) throw new Error('Credenciales de Garmin incorrectas. Verificá email y contraseña.');
+  const ticket = ticketMatch[1];
+
+  // Step 5: Exchange ticket for OAuth 1.0a token
+  const preauthBase = `${GC_API}/oauth-service/oauth/preauthorized`;
+  const preauthQp: Record<string, string> = {
+    ticket,
+    'login-url': SSO_EMBED,
+    'accepts-mfa-tokens': 'true',
+  };
+  const preauthOauth = oauthBase(consumer_key);
+  preauthOauth.oauth_signature = oauthSign('GET', preauthBase, { ...preauthQp, ...preauthOauth }, consumer_secret);
+
+  const r4 = await fetch(`${preauthBase}?${new URLSearchParams(preauthQp)}`, {
+    headers: {
+      Authorization: toAuthHeader(preauthOauth),
+      'User-Agent': UA_MOBILE,
+    },
+  });
+  const oauth1Text = await r4.text();
+  const oauth1Qs = new URLSearchParams(oauth1Text);
+  const oauth_token = oauth1Qs.get('oauth_token') ?? '';
+  const oauth_token_secret = oauth1Qs.get('oauth_token_secret') ?? '';
+  if (!oauth_token) throw new Error(`OAuth 1.0a falló (${r4.status}): ${oauth1Text.slice(0, 200)}`);
+
+  // Step 6: Exchange OAuth 1.0a for OAuth 2.0 bearer token
+  const exchangeBase = `${GC_API}/oauth-service/oauth/exchange/user/2.0`;
+  const exchOauth = oauthBase(consumer_key, oauth_token);
+  exchOauth.oauth_signature = oauthSign('POST', exchangeBase, exchOauth, consumer_secret, oauth_token_secret);
+
+  const r5 = await fetch(`${exchangeBase}?${new URLSearchParams(exchOauth)}`, {
+    method: 'POST',
+    headers: {
+      'User-Agent': UA_MOBILE,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+  });
+  const oauth2 = await r5.json() as { access_token?: string };
+  if (!oauth2.access_token) throw new Error(`Bearer token no recibido: ${JSON.stringify(oauth2).slice(0, 200)}`);
+
+  return oauth2.access_token;
+}
+
+// ─── Conversión ParsedWorkout → GarminWorkout ─────────────────────────────────
 
 let stepOrderCounter = 0;
 
 function buildExecutableStep(step: ParsedStep): GarminExecutableStep {
   stepOrderCounter++;
   const unitKey = step.endCondition === 'distance' ? 'meter' : 'second';
-
   return {
     type: 'ExecutableStepDTO',
     stepId: null,
     stepOrder: stepOrderCounter,
     childStepId: null,
     description: step.description,
-    stepType: {
-      stepTypeId: STEP_TYPE_IDS[step.stepType],
-      stepTypeKey: step.stepType,
-    },
-    endCondition: {
-      conditionTypeId: END_CONDITION_IDS[step.endCondition],
-      conditionTypeKey: step.endCondition,
-    },
+    stepType: { stepTypeId: STEP_TYPE_IDS[step.stepType], stepTypeKey: step.stepType },
+    endCondition: { conditionTypeId: END_CONDITION_IDS[step.endCondition], conditionTypeKey: step.endCondition },
     preferredEndConditionUnit: { unitKey },
     endConditionValue: step.endConditionValue,
     endConditionCompare: null,
     endConditionZone: null,
-    targetType: {
-      workoutTargetTypeId: TARGET_TYPE_IDS[step.targetType],
-      workoutTargetTypeKey: step.targetType,
-    },
+    targetType: { workoutTargetTypeId: TARGET_TYPE_IDS[step.targetType], workoutTargetTypeKey: step.targetType },
     targetValueOne: step.targetValueOne,
     targetValueTwo: step.targetValueTwo,
     zoneNumber: null,
@@ -70,109 +211,89 @@ function buildExecutableStep(step: ParsedStep): GarminExecutableStep {
 
 function buildRepeatGroup(group: ParsedRepeatGroup, childStepId: number): GarminRepeatGroup {
   stepOrderCounter++;
-  const groupStepOrder = stepOrderCounter;
-  const innerSteps = group.steps.map(s => buildExecutableStep(s));
-
+  const groupOrder = stepOrderCounter;
   return {
     type: 'RepeatGroupDTO',
     stepId: null,
-    stepOrder: groupStepOrder,
+    stepOrder: groupOrder,
     childStepId,
     numberOfIterations: group.numberOfIterations,
     smartRepeat: false,
-    workoutSteps: innerSteps,
+    workoutSteps: group.steps.map(s => buildExecutableStep(s)),
   };
 }
 
 function parsedToGarmin(parsed: ParsedWorkout): GarminWorkout {
   stepOrderCounter = 0;
   let childCounter = 1;
-
   const steps: GarminWorkoutStep[] = [];
-
   for (const s of parsed.steps) {
-    if (s.type === 'step') {
-      steps.push(buildExecutableStep(s));
-    } else if (s.type === 'repeat') {
-      steps.push(buildRepeatGroup(s as ParsedRepeatGroup, childCounter));
-      childCounter++;
-    }
+    if (s.type === 'step') steps.push(buildExecutableStep(s as ParsedStep));
+    else steps.push(buildRepeatGroup(s as ParsedRepeatGroup, childCounter++));
   }
-
   return {
     workoutId: null,
     workoutName: parsed.name,
-    description: `Creado con Garmin Workout Loader – © Martín Angeleri`,
+    description: 'Creado con Garmin Workout Loader – © Martín Angeleri',
     sportType: { sportTypeId: 1, sportTypeKey: 'running' },
-    workoutSegments: [
-      {
-        segmentOrder: 1,
-        sportType: { sportTypeId: 1, sportTypeKey: 'running' },
-        workoutSteps: steps,
-      },
-    ],
+    workoutSegments: [{
+      segmentOrder: 1,
+      sportType: { sportTypeId: 1, sportTypeKey: 'running' },
+      workoutSteps: steps,
+    }],
   };
 }
 
-// ─── Handler ───────────────────────────────────────────────────────────────────
+// ─── Handler ──────────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { workout, email, password } = req.body ?? {};
+  if (!workout || typeof workout !== 'object') return res.status(400).json({ error: 'El campo "workout" es requerido.' });
+  if (!email || typeof email !== 'string' || !email.includes('@')) return res.status(400).json({ error: 'Email inválido.' });
+  if (!password || typeof password !== 'string') return res.status(400).json({ error: 'Contraseña requerida.' });
 
-  // Validate inputs
-  if (!workout || typeof workout !== 'object') {
-    return res.status(400).json({ error: 'El campo "workout" es requerido.' });
-  }
-  if (!email || typeof email !== 'string' || !email.includes('@')) {
-    return res.status(400).json({ error: 'Email inválido.' });
-  }
-  if (!password || typeof password !== 'string' || password.length < 1) {
-    return res.status(400).json({ error: 'Contraseña requerida.' });
-  }
-
-  if (!GarminConnect) {
-    return res.status(500).json({ error: 'El módulo garmin-connect no pudo cargarse en el servidor. Revisá los logs de Vercel.' });
-  }
-  type GarminClient = { login(email: string, password: string): Promise<void>; addWorkout(workout: unknown): Promise<unknown> };
-  let gc: GarminClient;
+  let bearerToken: string;
   try {
-    gc = new GarminConnect({ username: email, password });
-  } catch {
-    return res.status(500).json({ error: 'No se pudo inicializar el cliente de Garmin Connect.' });
-  }
-
-  try {
-    await gc.login(email, password);
+    console.log('[upload-workout] Autenticando en Garmin Connect...');
+    bearerToken = await garminGetBearerToken(email, password);
+    console.log('[upload-workout] Login OK');
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : '';
-    console.error('[upload-workout] Login error:', msg);
-    // Distinguish auth errors from network errors
-    if (msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('401')) {
-      return res.status(401).json({ error: 'Credenciales de Garmin incorrectas. Verificá email y contraseña.' });
-    }
-    return res.status(502).json({ error: 'No se pudo conectar a Garmin Connect. Intentá de nuevo.' });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[upload-workout] Auth error:', msg);
+    const status = (msg.includes('Credenciales') || msg.includes('incorrectas')) ? 401 : 502;
+    return res.status(status).json({ error: msg });
   }
 
   try {
     const garminWorkout = parsedToGarmin(workout as ParsedWorkout);
-    const result = await gc.addWorkout(garminWorkout);
+    console.log('[upload-workout] Subiendo workout:', garminWorkout.workoutName);
 
-    const workoutId: number =
-      (result as Record<string, unknown>)?.workoutId as number
-      ?? (result as Record<string, unknown>)?.id as number
-      ?? 0;
-
-    return res.status(200).json({
-      workoutId,
-      workoutName: garminWorkout.workoutName,
+    const uploadRes = await fetch(`${GC_API}/workout-service/workout`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${bearerToken}`,
+        'Content-Type': 'application/json',
+        'NK': 'NT',
+        'di-backend': 'connectapi.garmin.com',
+      },
+      body: JSON.stringify(garminWorkout),
     });
+
+    const uploadText = await uploadRes.text();
+    console.log('[upload-workout] Garmin response', uploadRes.status, uploadText.slice(0, 300));
+
+    if (!uploadRes.ok) {
+      return res.status(502).json({ error: `Garmin rechazó el workout (${uploadRes.status}): ${uploadText.slice(0, 200)}` });
+    }
+
+    const result = JSON.parse(uploadText) as Record<string, unknown>;
+    const workoutId = (result.workoutId ?? result.id ?? 0) as number;
+    return res.status(200).json({ workoutId, workoutName: garminWorkout.workoutName });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Error desconocido';
+    const msg = err instanceof Error ? err.message : String(err);
     console.error('[upload-workout] Upload error:', msg);
-    return res.status(500).json({ error: 'Error al subir el workout a Garmin Connect. ' + msg });
+    return res.status(500).json({ error: 'Error al subir el workout: ' + msg });
   }
 }
