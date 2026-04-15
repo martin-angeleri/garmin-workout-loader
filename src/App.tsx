@@ -50,13 +50,14 @@ export default function App() {
           password: credentials.password,
         }),
       });
+      // Leer el texto primero para no consumir el stream antes del parse
+      const rawText = await res.text();
       let data: Record<string, unknown>;
       try {
-        data = await res.json();
+        data = JSON.parse(rawText);
       } catch {
-        const text = await res.text().catch(() => '');
-        console.error('[upload] respuesta no-JSON del servidor:', res.status, text);
-        setErrorMessage(`Error del servidor (${res.status}): ${text.slice(0, 120) || 'sin detalle'}`);
+        console.error('[upload] respuesta no-JSON del servidor:', res.status, rawText);
+        setErrorMessage(`Error del servidor (${res.status}): ${rawText.slice(0, 200) || 'sin detalle'}`);
         setStatus('error');
         return;
       }
