@@ -277,6 +277,7 @@ async function garminGetBearerToken(email: string, password: string): Promise<st
 
   // Nunca debería llegar acá
   throw new Error('Error inesperado en el flujo de autenticación de Garmin.');
+}
 
 // ─── Conversión ParsedWorkout → GarminWorkout ─────────────────────────────────
 
