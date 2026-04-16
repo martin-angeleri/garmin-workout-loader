@@ -150,123 +150,133 @@ const SSO_HEADERS = {
 };
 
 async function garminGetBearerToken(email: string, password: string): Promise<string> {
-  const jar: CookieJar = new Map();
-
   // Step 1: OAuth consumer keys (public S3 endpoint)
   const consumerRes = await fetch('https://thegarth.s3.amazonaws.com/oauth_consumer.json');
   if (!consumerRes.ok) throw new Error('No se pudieron obtener las claves OAuth de Garmin');
   const { consumer_key, consumer_secret } = await consumerRes.json() as { consumer_key: string; consumer_secret: string };
 
-  // Step 2: Init SSO session (sets Cloudflare cookies)
-  const r1 = await fetch(
-    `${SSO_ORIGIN}/mobile/sso/en/sign-in?clientId=${CLIENT_ID}`,
-    {
-      headers: { ...SSO_HEADERS, 'Sec-Fetch-Site': 'none', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'document' },
+  // Reintentar el login hasta 3 veces si Cloudflare devuelve 429 (bloqueo intermitente)
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAY_MS = 2000;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // Step 2: Init SSO session (sets Cloudflare cookies)
+    const jar: CookieJar = new Map();
+    const r1 = await fetch(
+      `${SSO_ORIGIN}/mobile/sso/en/sign-in?clientId=${CLIENT_ID}`,
+      {
+        headers: { ...SSO_HEADERS, 'Sec-Fetch-Site': 'none', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'document' },
+        redirect: 'follow',
+      }
+    );
+    updateJar(jar, extractSetCookies(r1.headers));
+
+    // Step 3: Login via JSON mobile API
+    const loginParams = new URLSearchParams({
+      clientId: CLIENT_ID,
+      locale: 'en-US',
+      service: SERVICE_URL,
+    });
+    const r2 = await fetch(`${SSO_ORIGIN}/mobile/api/login?${loginParams}`, {
+      method: 'POST',
+      headers: {
+        ...SSO_HEADERS,
+        'Content-Type': 'application/json',
+        'Cookie': jarHeader(jar),
+        'Referer': `${SSO_ORIGIN}/mobile/sso/en/sign-in?clientId=${CLIENT_ID}`,
+      },
+      body: JSON.stringify({ username: email, password, rememberMe: false, captchaToken: '' }),
       redirect: 'follow',
+    });
+    updateJar(jar, extractSetCookies(r2.headers));
+
+    const r2Text = await r2.text();
+
+    // Si 429, reintentar (Cloudflare bloqueo intermitente desde datacenter IPs)
+    if (r2.status === 429 || r2Text.toLowerCase().includes('too many requests')) {
+      console.log(`[upload-workout] Login intento ${attempt}/${MAX_ATTEMPTS} → 429, ${attempt < MAX_ATTEMPTS ? `reintentando en ${RETRY_DELAY_MS}ms...` : 'sin más intentos.'}`);
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+      throw new Error(`Garmin está bloqueando temporalmente los accesos programáticos (error 429 tras ${MAX_ATTEMPTS} intentos). Esto es una restricción de Cloudflare sobre servidores en la nube, no un problema de credenciales. Intentá de nuevo en unos minutos.`);
     }
-  );
-  updateJar(jar, extractSetCookies(r1.headers));
 
-  // Step 3: Login via JSON mobile API
-  const loginParams = new URLSearchParams({
-    clientId: CLIENT_ID,
-    locale: 'en-US',
-    service: SERVICE_URL,
-  });
-  const r2 = await fetch(`${SSO_ORIGIN}/mobile/api/login?${loginParams}`, {
-    method: 'POST',
-    headers: {
-      ...SSO_HEADERS,
-      'Content-Type': 'application/json',
-      'Cookie': jarHeader(jar),
-      'Referer': `${SSO_ORIGIN}/mobile/sso/en/sign-in?clientId=${CLIENT_ID}`,
-    },
-    body: JSON.stringify({ username: email, password, rememberMe: false, captchaToken: '' }),
-    redirect: 'follow',
-  });
-  updateJar(jar, extractSetCookies(r2.headers));
+    if (!r2.ok && r2.status !== 200) {
+      throw new Error(`Error al conectar con Garmin SSO (${r2.status}): ${r2Text.slice(0, 300)}`);
+    }
 
-  // Leer el body una sola vez como texto, luego intentar parsear JSON
-  const r2Text = await r2.text();
+    let loginJson: { responseStatus?: { type?: string; message?: string }; serviceTicketId?: string };
+    try {
+      loginJson = JSON.parse(r2Text);
+    } catch {
+      const preview = r2Text.slice(0, 300).replace(/\s+/g, ' ');
+      throw new Error(`Garmin SSO devolvió HTML en lugar de JSON (status ${r2.status}). Posible bloqueo de Cloudflare. Detalle: ${preview}`);
+    }
 
-  if (r2.status === 429 || r2Text.toLowerCase().includes('too many requests')) {
-    throw new Error('Garmin está bloqueando temporalmente los accesos programáticos (error 429). Esto es una restricción de Garmin/Cloudflare, no un problema de credenciales. Intentá de nuevo en unos minutos.');
+    const respType = loginJson?.responseStatus?.type ?? '';
+    if (respType === 'MFA_REQUIRED') {
+      throw new Error('Garmin requiere verificación en dos pasos (MFA). Desactivala en connect.garmin.com para poder usar esta app.');
+    }
+    if (respType !== 'SUCCESSFUL' || !loginJson.serviceTicketId) {
+      const msg = loginJson?.responseStatus?.message ?? respType ?? 'sin detalle';
+      throw new Error(`Credenciales de Garmin incorrectas o error de autenticación: ${msg}`);
+    }
+
+    const ticket = loginJson.serviceTicketId;
+
+    // Step 4: Exchange ticket for OAuth 1.0a token
+    const preauthBase = `${GC_API}/oauth-service/oauth/preauthorized`;
+    const preauthQp: Record<string, string> = {
+      ticket,
+      'login-url': SERVICE_URL,
+      'accepts-mfa-tokens': 'true',
+    };
+    const preauthOauth = oauthBase(consumer_key);
+    preauthOauth.oauth_signature = oauthSign('GET', preauthBase, { ...preauthQp, ...preauthOauth }, consumer_secret);
+
+    const r3 = await fetch(`${preauthBase}?${new URLSearchParams(preauthQp)}`, {
+      headers: {
+        Authorization: toAuthHeader(preauthOauth),
+        'User-Agent': UA_IOS_APP,
+        'X-app-ver': IOS_APP_VER,
+        'X-Garmin-User-Agent': UA_IOS_FULL,
+      },
+    });
+    const oauth1Text = await r3.text();
+    const oauth1Qs = new URLSearchParams(oauth1Text);
+    const oauth_token = oauth1Qs.get('oauth_token') ?? '';
+    const oauth_token_secret = oauth1Qs.get('oauth_token_secret') ?? '';
+    if (!oauth_token) throw new Error(`OAuth 1.0a falló (${r3.status}): ${oauth1Text.slice(0, 200)}`);
+
+    // Step 5: Exchange OAuth 1.0a for OAuth 2.0 bearer token
+    const exchangeBase = `${GC_API}/oauth-service/oauth/exchange/user/2.0`;
+    const exchOauth = oauthBase(consumer_key, oauth_token);
+    exchOauth.oauth_signature = oauthSign('POST', exchangeBase, exchOauth, consumer_secret, oauth_token_secret);
+
+    const r4 = await fetch(`${exchangeBase}?${new URLSearchParams(exchOauth)}`, {
+      method: 'POST',
+      headers: {
+        'User-Agent': UA_IOS_APP,
+        'X-app-ver': IOS_APP_VER,
+        'X-Garmin-User-Agent': UA_IOS_FULL,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
+    const r4Text = await r4.text();
+    let oauth2: { access_token?: string };
+    try {
+      oauth2 = JSON.parse(r4Text);
+    } catch {
+      throw new Error(`OAuth2 exchange devolvió respuesta inválida (${r4.status}): ${r4Text.slice(0, 300)}`);
+    }
+    if (!oauth2.access_token) throw new Error(`Bearer token no recibido (${r4.status}): ${r4Text.slice(0, 200)}`);
+
+    return oauth2.access_token;
   }
-  if (!r2.ok && r2.status !== 200) {
-    throw new Error(`Error al conectar con Garmin SSO (${r2.status}): ${r2Text.slice(0, 300)}`);
-  }
 
-  let loginJson: { responseStatus?: { type?: string; message?: string }; serviceTicketId?: string };
-  try {
-    loginJson = JSON.parse(r2Text);
-  } catch {
-    // Garmin devolvió HTML en lugar de JSON (Cloudflare challenge o redirect)
-    const preview = r2Text.slice(0, 300).replace(/\s+/g, ' ');
-    throw new Error(`Garmin SSO devolvió HTML en lugar de JSON (status ${r2.status}). Posible bloqueo de Cloudflare. Detalle: ${preview}`);
-  }
-
-  const respType = loginJson?.responseStatus?.type ?? '';
-  if (respType === 'MFA_REQUIRED') {
-    throw new Error('Garmin requiere verificación en dos pasos (MFA). Desactivala en connect.garmin.com para poder usar esta app.');
-  }
-  if (respType !== 'SUCCESSFUL' || !loginJson.serviceTicketId) {
-    const msg = loginJson?.responseStatus?.message ?? respType ?? 'sin detalle';
-    throw new Error(`Credenciales de Garmin incorrectas o error de autenticación: ${msg}`);
-  }
-
-  const ticket = loginJson.serviceTicketId;
-
-  // Step 4: Exchange ticket for OAuth 1.0a token
-  const preauthBase = `${GC_API}/oauth-service/oauth/preauthorized`;
-  const preauthQp: Record<string, string> = {
-    ticket,
-    'login-url': SERVICE_URL,
-    'accepts-mfa-tokens': 'true',
-  };
-  const preauthOauth = oauthBase(consumer_key);
-  preauthOauth.oauth_signature = oauthSign('GET', preauthBase, { ...preauthQp, ...preauthOauth }, consumer_secret);
-
-  const r3 = await fetch(`${preauthBase}?${new URLSearchParams(preauthQp)}`, {
-    headers: {
-      Authorization: toAuthHeader(preauthOauth),
-      'User-Agent': UA_IOS_APP,
-      'X-app-ver': IOS_APP_VER,
-      'X-Garmin-User-Agent': UA_IOS_FULL,
-    },
-  });
-  const oauth1Text = await r3.text();
-  const oauth1Qs = new URLSearchParams(oauth1Text);
-  const oauth_token = oauth1Qs.get('oauth_token') ?? '';
-  const oauth_token_secret = oauth1Qs.get('oauth_token_secret') ?? '';
-  if (!oauth_token) throw new Error(`OAuth 1.0a falló (${r3.status}): ${oauth1Text.slice(0, 200)}`);
-
-  // Step 5: Exchange OAuth 1.0a for OAuth 2.0 bearer token
-  // OAuth params van como query string (no Authorization header) para evitar
-  // problemas de firma con body params
-  const exchangeBase = `${GC_API}/oauth-service/oauth/exchange/user/2.0`;
-  const exchOauth = oauthBase(consumer_key, oauth_token);
-  exchOauth.oauth_signature = oauthSign('POST', exchangeBase, exchOauth, consumer_secret, oauth_token_secret);
-
-  const r4 = await fetch(`${exchangeBase}?${new URLSearchParams(exchOauth)}`, {
-    method: 'POST',
-    headers: {
-      'User-Agent': UA_IOS_APP,
-      'X-app-ver': IOS_APP_VER,
-      'X-Garmin-User-Agent': UA_IOS_FULL,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-  });
-  const r4Text = await r4.text();
-  let oauth2: { access_token?: string };
-  try {
-    oauth2 = JSON.parse(r4Text);
-  } catch {
-    throw new Error(`OAuth2 exchange devolvió respuesta inválida (${r4.status}): ${r4Text.slice(0, 300)}`);
-  }
-  if (!oauth2.access_token) throw new Error(`Bearer token no recibido (${r4.status}): ${r4Text.slice(0, 200)}`);
-
-  return oauth2.access_token;
-}
+  // Nunca debería llegar acá
+  throw new Error('Error inesperado en el flujo de autenticación de Garmin.');
 
 // ─── Conversión ParsedWorkout → GarminWorkout ─────────────────────────────────
 
