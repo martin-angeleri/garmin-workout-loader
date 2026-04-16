@@ -8,6 +8,7 @@
   "functions": {
     "api/parse-workout.ts": { "maxDuration": 30 },
     "api/upload-workout.ts": { "maxDuration": 30 },
+    "api/connect-garmin.ts": { "maxDuration": 30 },
     "api/debug.ts": { "maxDuration": 10 }
   }
 }

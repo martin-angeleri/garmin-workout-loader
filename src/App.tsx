@@ -8,7 +8,7 @@ import SuccessScreen from './components/SuccessScreen';
 import type { ParsedWorkout, AppStatus, UploadResult } from './types/workout';
 
 export default function App() {
-  const { credentials, save: saveCredentials, isConfigured } = useCredentials();
+  const { credentials, save: saveCredentials, isConfigured, isTokenExpired } = useCredentials();
   const [showSetup, setShowSetup] = useState(!isConfigured);
   const [editingCredentials, setEditingCredentials] = useState(false);
 
@@ -40,6 +40,13 @@ export default function App() {
 
   const handleUpload = async () => {
     if (!parsedWorkout || !credentials) return;
+
+    if (isTokenExpired()) {
+      setEditingCredentials(true);
+      setErrorMessage('Tu conexión con Garmin expiró. Reconectá tu cuenta para continuar.');
+      return;
+    }
+
     setStatus('uploading');
     setErrorMessage('');
     try {
@@ -48,11 +55,9 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workout: parsedWorkout,
-          email: credentials.email,
-          password: credentials.password,
+          accessToken: credentials.accessToken,
         }),
       });
-      // Leer el texto primero para no consumir el stream antes del parse
       const rawText = await res.text();
       let data: Record<string, unknown>;
       try {
@@ -61,6 +66,12 @@ export default function App() {
         console.error('[upload] respuesta no-JSON del servidor:', res.status, rawText);
         setErrorMessage(`Error del servidor (${res.status}): ${rawText.slice(0, 200) || 'sin detalle'}`);
         setStatus('error');
+        return;
+      }
+      if (res.status === 401) {
+        setStatus('error');
+        setErrorMessage('Tu token de Garmin expiró. Reconectá tu cuenta desde la configuración.');
+        setEditingCredentials(true);
         return;
       }
       if (!res.ok) {
@@ -109,13 +120,15 @@ export default function App() {
         />
       )}
 
-      {editingCredentials && credentials && (
+      {editingCredentials && (
         <CredentialsSetup
           isFirstTime={false}
-          currentEmail={credentials.email}
+          currentEmail={credentials?.email}
+          currentTokenExpiresAt={credentials?.tokenExpiresAt}
           onSave={(creds) => {
             saveCredentials(creds);
             setEditingCredentials(false);
+            setErrorMessage('');
           }}
           onClose={() => setEditingCredentials(false)}
         />

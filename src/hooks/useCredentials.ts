@@ -9,7 +9,8 @@ export function useCredentials() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      if (parsed?.email && parsed?.password) return parsed as GarminCredentials;
+      // Soporta el formato nuevo (accessToken) — descarta el viejo (password)
+      if (parsed?.email && parsed?.accessToken) return parsed as GarminCredentials;
       return null;
     } catch {
       return null;
@@ -26,5 +27,11 @@ export function useCredentials() {
     setCredentials(null);
   }, []);
 
-  return { credentials, save, clear, isConfigured: credentials !== null };
+  const isTokenExpired = useCallback(() => {
+    if (!credentials) return true;
+    // Considerar expirado si quedan menos de 7 días
+    return credentials.tokenExpiresAt < Date.now() + 7 * 24 * 60 * 60 * 1000;
+  }, [credentials]);
+
+  return { credentials, save, clear, isConfigured: credentials !== null, isTokenExpired };
 }

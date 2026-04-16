@@ -115,7 +115,9 @@ export interface GarminWorkout {
 
 export interface GarminCredentials {
   email: string;
-  password: string;
+  accessToken: string;
+  /** Unix timestamp (ms) cuando expira el token */
+  tokenExpiresAt: number;
 }
 
 export type AppStatus =
