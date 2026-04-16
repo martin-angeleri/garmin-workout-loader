@@ -35,7 +35,7 @@ export default function CredentialsSetup({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}>
-      <div className="w-full max-w-md rounded-2xl p-8"
+      <div className="w-full max-w-md rounded-2xl p-5 sm:p-8"
            style={{ background: '#1A1A1C', border: '1px solid #2E2E30' }}>
 
         {/* Icon */}

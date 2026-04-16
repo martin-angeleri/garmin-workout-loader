@@ -150,7 +150,7 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
     <div className="w-full max-w-2xl mx-auto space-y-5">
 
       {/* Header row */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <button
           onClick={onBack}
           className="flex items-center gap-1.5 text-sm transition-colors"
@@ -161,7 +161,7 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
           Editar texto
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <button
             onClick={onReparse}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all"
@@ -233,7 +233,7 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
       </div>
 
       {/* Upload button */}
-      <div className="rounded-2xl p-5" style={{ background: '#141416', border: '1px solid #2A2A2C' }}>
+      <div className="rounded-2xl p-4 sm:p-5" style={{ background: '#141416', border: '1px solid #2A2A2C' }}>
         <div className="flex items-center gap-2 mb-4">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
                style={{ background: 'rgba(233,30,140,0.15)', fontSize: '20px' }}>

@@ -9,7 +9,7 @@ export default function Header({ email, onChangeAccount }: Props) {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
-    <header className="flex items-center justify-between px-6 py-4"
+    <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4"
             style={{ borderBottom: '1px solid #1E1E20' }}>
 
       {/* Logo */}
@@ -21,7 +21,7 @@ export default function Header({ email, onChangeAccount }: Props) {
           </svg>
         </div>
         <div>
-          <h1 className="text-base font-bold leading-none" style={{ color: '#E8E8EA' }}>
+          <h1 className="text-sm sm:text-base font-bold leading-none" style={{ color: '#E8E8EA' }}>
             Garmin <span className="gradient-text">Workout</span> Loader
           </h1>
           <p className="text-xs mt-0.5" style={{ color: '#555' }}>

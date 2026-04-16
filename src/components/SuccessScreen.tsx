@@ -9,7 +9,7 @@ export default function SuccessScreen({ result, onReset }: Props) {
   const garminUrl = `https://connect.garmin.com/modern/workout/${result.workoutId}`;
 
   return (
-    <div className="w-full max-w-2xl mx-auto text-center py-12 px-4">
+    <div className="w-full max-w-2xl mx-auto text-center py-8 px-4">
 
       {/* Success icon */}
       <div className="flex justify-center mb-6">

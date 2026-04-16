@@ -88,41 +88,6 @@ export default function App() {
     if (inputText.trim()) handleParse(inputText);
   };
 
-  const TEST_WORKOUT = {
-    name: 'TEST 5x1km',
-    steps: [
-      { type: 'step', stepType: 'warmup', description: 'Entrada en calor', endCondition: 'time', endConditionValue: 600, targetType: 'no.target', targetValueOne: null, targetValueTwo: null },
-      { type: 'repeat', numberOfIterations: 5, steps: [
-        { type: 'step', stepType: 'interval', description: '1km al 85%', endCondition: 'distance', endConditionValue: 1000, targetType: 'heart.rate.zone', targetValueOne: 152, targetValueTwo: 171, },
-        { type: 'step', stepType: 'recovery', description: 'Recuperación', endCondition: 'time', endConditionValue: 90, targetType: 'no.target', targetValueOne: null, targetValueTwo: null },
-      ]},
-      { type: 'step', stepType: 'cooldown', description: 'Vuelta a la calma', endCondition: 'time', endConditionValue: 300, targetType: 'no.target', targetValueOne: null, targetValueTwo: null },
-    ],
-  };
-
-  const handleTestUpload = async () => {
-    if (!credentials) return;
-    setStatus('uploading');
-    setErrorMessage('');
-    try {
-      const res = await fetch('/api/upload-workout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workout: TEST_WORKOUT, email: credentials.email, password: credentials.password }),
-      });
-      const rawText = await res.text();
-      console.log('[TEST] status:', res.status, 'body:', rawText.slice(0, 500));
-      let data: Record<string, unknown>;
-      try { data = JSON.parse(rawText); } catch { setErrorMessage(`[TEST] no-JSON (${res.status}): ${rawText.slice(0, 300)}`); setStatus('error'); return; }
-      if (!res.ok) { setErrorMessage(`[TEST] Error ${res.status}: ${String(data.error)}`); setStatus('error'); return; }
-      setUploadResult(data as unknown as UploadResult);
-      setStatus('success');
-    } catch (err: unknown) {
-      setErrorMessage(`[TEST] ${err instanceof Error ? err.message : 'Error inesperado'}`);
-      setStatus('error');
-    }
-  };
-
   if (showSetup) {
     return (
       <CredentialsSetup
@@ -156,16 +121,16 @@ export default function App() {
         />
       )}
 
-      <main className="flex-1 flex flex-col items-center px-4 py-10">
+      <main className="flex-1 flex flex-col items-center px-4 py-6 sm:py-10">
         {status === 'idle' && (
-          <div className="text-center mb-10 max-w-2xl">
+          <div className="text-center mb-6 sm:mb-10 max-w-2xl">
             <div
               className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold mb-4"
               style={{ background: 'rgba(233,30,140,0.12)', color: '#E91E8C', border: '1px solid rgba(233,30,140,0.25)' }}
             >
               <span style={{ color: '#FF4DB8' }}>✦</span> Powered by Groq + Garmin Connect
             </div>
-            <h1 className="text-4xl font-bold leading-tight mb-3" style={{ color: '#E8E8EA' }}>
+            <h1 className="text-3xl sm:text-4xl font-bold leading-tight mb-3" style={{ color: '#E8E8EA' }}>
               Cargá tu entrenamiento<br />
               <span className="gradient-text">en Garmin en segundos</span>
             </h1>
@@ -207,16 +172,6 @@ export default function App() {
           />
         )}
 
-        {status === 'idle' && isConfigured && (
-          <button
-            onClick={handleTestUpload}
-            className="mt-4 px-5 py-2 rounded-xl text-sm font-semibold"
-            style={{ background: 'rgba(233,30,140,0.12)', color: '#E91E8C', border: '1px solid rgba(233,30,140,0.3)' }}
-          >
-            🧪 TEST: Subir workout hardcodeado a Garmin
-          </button>
-        )}
-
         {(status === 'parsed' || status === 'uploading') && parsedWorkout && (
           <WorkoutPreview
             workout={parsedWorkout}
@@ -235,7 +190,7 @@ export default function App() {
       </main>
 
       <footer
-        className="py-5 px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs"
+        className="py-4 px-4 sm:px-6 flex flex-col items-center sm:flex-row sm:justify-between gap-1 sm:gap-2 text-xs text-center"
         style={{ borderTop: '1px solid #1E1E20', color: '#444' }}
       >
         <span>© {new Date().getFullYear()} Martín Angeleri. Todos los derechos reservados.</span>

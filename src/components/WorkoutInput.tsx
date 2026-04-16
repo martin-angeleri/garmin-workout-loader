@@ -57,12 +57,12 @@ export default function WorkoutInput({ onParse, loading, value, onChange }: Prop
             value={value}
             onChange={e => onChange(e.target.value)}
             placeholder={`Ej:\n-E/calor: 15min suaves\n-10 x 400m progresivos terminando al 80%. Pausa de 50s\n-Reg: 15min suaves`}
-            className="w-full px-5 py-4 rounded-2xl text-sm leading-relaxed font-mono transition-colors"
+            className="w-full px-4 sm:px-5 py-4 rounded-2xl text-sm leading-relaxed font-mono transition-colors"
             style={{
               background: '#141416',
               border: '1.5px solid #2E2E30',
               color: '#E8E8EA',
-              minHeight: '220px',
+              minHeight: '180px',
             }}
             disabled={loading}
             spellCheck={false}
