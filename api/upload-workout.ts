@@ -179,20 +179,23 @@ async function garminGetBearerToken(email: string, password: string): Promise<st
   });
   updateJar(jar, extractSetCookies(r2.headers));
 
-  if (r2.status === 429) {
+  // Leer el body una sola vez como texto, luego intentar parsear JSON
+  const r2Text = await r2.text();
+
+  if (r2.status === 429 || r2Text.toLowerCase().includes('too many requests')) {
     throw new Error('Garmin está bloqueando temporalmente los accesos programáticos (error 429). Esto es una restricción de Garmin/Cloudflare, no un problema de credenciales. Intentá de nuevo en unos minutos.');
   }
   if (!r2.ok && r2.status !== 200) {
-    const body = await r2.text().catch(() => '');
-    throw new Error(`Error al conectar con Garmin SSO (${r2.status}): ${body.slice(0, 200)}`);
+    throw new Error(`Error al conectar con Garmin SSO (${r2.status}): ${r2Text.slice(0, 300)}`);
   }
 
   let loginJson: { responseStatus?: { type?: string; message?: string }; serviceTicketId?: string };
   try {
-    loginJson = await r2.json();
+    loginJson = JSON.parse(r2Text);
   } catch {
-    const rawText = await r2.text().catch(() => '');
-    throw new Error(`Respuesta inesperada de Garmin SSO: ${rawText.slice(0, 200)}`);
+    // Garmin devolvió HTML en lugar de JSON (Cloudflare challenge o redirect)
+    const preview = r2Text.slice(0, 300).replace(/\s+/g, ' ');
+    throw new Error(`Garmin SSO devolvió HTML en lugar de JSON (status ${r2.status}). Posible bloqueo de Cloudflare. Detalle: ${preview}`);
   }
 
   const respType = loginJson?.responseStatus?.type ?? '';
@@ -243,8 +246,14 @@ async function garminGetBearerToken(email: string, password: string): Promise<st
     },
     body: exchBody.toString(),
   });
-  const oauth2 = await r4.json() as { access_token?: string };
-  if (!oauth2.access_token) throw new Error(`Bearer token no recibido: ${JSON.stringify(oauth2).slice(0, 200)}`);
+  const r4Text = await r4.text();
+  let oauth2: { access_token?: string };
+  try {
+    oauth2 = JSON.parse(r4Text);
+  } catch {
+    throw new Error(`OAuth2 exchange devolvió respuesta inválida (${r4.status}): ${r4Text.slice(0, 300)}`);
+  }
+  if (!oauth2.access_token) throw new Error(`Bearer token no recibido (${r4.status}): ${r4Text.slice(0, 200)}`);
 
   return oauth2.access_token;
 }
