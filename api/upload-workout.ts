@@ -130,16 +130,23 @@ function toAuthHeader(params: Record<string, string>): string {
 
 const GC_API      = 'https://connectapi.garmin.com';
 const SSO_ORIGIN  = 'https://sso.garmin.com';
-const SERVICE_URL = 'https://mobile.integration.garmin.com/gcm/android';
-const CLIENT_ID   = 'GCM_ANDROID_DARK';
-const UA_MOBILE   = 'com.garmin.android.apps.connectmobile';
+// iOS client — matches the actual Garmin Connect iOS app (reverse-engineered, Apr 2026)
+const SERVICE_URL = 'https://mobile.integration.garmin.com/gcm/ios';
+const CLIENT_ID   = 'GCM_IOS_DARK';
+const IOS_APP_VER = '5.23.1';
+const UA_IOS_APP  = `GCM-iOS-${IOS_APP_VER}.1`;
+const UA_IOS_FULL = `com.garmin.connect.mobile/${IOS_APP_VER}.1;;Apple/iPhone14,7/;iOS/18.4.1;CFNetwork/1.0(Darwin/25.3.0)`;
 
-// Browser-like headers for SSO — Cloudflare requires requests to look like a real browser
+// Browser WebView headers for the SSO login page (Cloudflare-friendly)
 const SSO_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+  'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
   'Accept': 'application/json, text/plain, */*',
   'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
   'Origin': SSO_ORIGIN,
+  'Sec-Fetch-Site': 'same-origin',
+  'Sec-Fetch-Mode': 'cors',
+  'Sec-Fetch-Dest': 'empty',
 };
 
 async function garminGetBearerToken(email: string, password: string): Promise<string> {
@@ -222,7 +229,9 @@ async function garminGetBearerToken(email: string, password: string): Promise<st
   const r3 = await fetch(`${preauthBase}?${new URLSearchParams(preauthQp)}`, {
     headers: {
       Authorization: toAuthHeader(preauthOauth),
-      'User-Agent': UA_MOBILE,
+      'User-Agent': UA_IOS_APP,
+      'X-app-ver': IOS_APP_VER,
+      'X-Garmin-User-Agent': UA_IOS_FULL,
     },
   });
   const oauth1Text = await r3.text();
@@ -236,12 +245,15 @@ async function garminGetBearerToken(email: string, password: string): Promise<st
   const exchOauth = oauthBase(consumer_key, oauth_token);
   exchOauth.oauth_signature = oauthSign('POST', exchangeBase, exchOauth, consumer_secret, oauth_token_secret);
 
-  const exchBody = new URLSearchParams({ audience: 'GARMIN_CONNECT_MOBILE_ANDROID_DI' });
+  const exchBody = new URLSearchParams({ audience: 'GARMIN_CONNECT_MOBILE_IOS_DI' });
   const r4 = await fetch(exchangeBase, {
     method: 'POST',
     headers: {
       Authorization: toAuthHeader(exchOauth),
-      'User-Agent': UA_MOBILE,
+      'User-Agent': UA_IOS_APP,
+      'X-app-ver': IOS_APP_VER,
+      'X-garmin-client-id': 'GARMIN_CONNECT_MOBILE_IOS',
+      'X-Garmin-User-Agent': UA_IOS_FULL,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: exchBody.toString(),
