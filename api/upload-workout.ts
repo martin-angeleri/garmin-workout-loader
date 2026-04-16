@@ -241,22 +241,20 @@ async function garminGetBearerToken(email: string, password: string): Promise<st
   if (!oauth_token) throw new Error(`OAuth 1.0a falló (${r3.status}): ${oauth1Text.slice(0, 200)}`);
 
   // Step 5: Exchange OAuth 1.0a for OAuth 2.0 bearer token
+  // OAuth params van como query string (no Authorization header) para evitar
+  // problemas de firma con body params
   const exchangeBase = `${GC_API}/oauth-service/oauth/exchange/user/2.0`;
   const exchOauth = oauthBase(consumer_key, oauth_token);
   exchOauth.oauth_signature = oauthSign('POST', exchangeBase, exchOauth, consumer_secret, oauth_token_secret);
 
-  const exchBody = new URLSearchParams({ audience: 'GARMIN_CONNECT_MOBILE_IOS_DI' });
-  const r4 = await fetch(exchangeBase, {
+  const r4 = await fetch(`${exchangeBase}?${new URLSearchParams(exchOauth)}`, {
     method: 'POST',
     headers: {
-      Authorization: toAuthHeader(exchOauth),
       'User-Agent': UA_IOS_APP,
       'X-app-ver': IOS_APP_VER,
-      'X-garmin-client-id': 'GARMIN_CONNECT_MOBILE_IOS',
       'X-Garmin-User-Agent': UA_IOS_FULL,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: exchBody.toString(),
   });
   const r4Text = await r4.text();
   let oauth2: { access_token?: string };
