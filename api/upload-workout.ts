@@ -37,30 +37,46 @@ interface ParsedWorkout {
 }
 interface GarminExecutableStep {
   type: 'ExecutableStepDTO';
-  stepId: null; stepOrder: number; childStepId: null;
+  stepId: null;
+  stepOrder: number;
+  childStepId: null;
   description: string;
   stepType: { stepTypeId: number; stepTypeKey: StepTypeKey };
   endCondition: { conditionTypeId: number; conditionTypeKey: EndConditionKey };
-                                                                      di ionValue: number | null;
-  endConditionCompare: null; endConditionZone: null;
+  preferredEndConditionUnit: { unitKey: 'second' | 'meter' };
+  endConditionValue: number | null;
+  endConditionCompare: null;
+  endConditionZone: null;
   targetType: { workoutTargetTypeId: number; workoutTargetTypeKey: TargetTypeKey };
-  targetValueOne: number | null; targetValueTwo: number | null; zoneNumber: null;
+  targetValueOne: number | null;
+  targetValueTwo: number | null;
+  zoneNumber: null;
 }
 interface GarminRepeatGroup {
   type: 'RepeatGroupDTO';
-  stepId: null; stepOrder: number; childStepId: number;
-  numberOfIterations: number; smartRepeat: false;
+  stepId: null;
+  stepOrder: number;
+  childStepId: number;
+  numberOfIterations: number;
+  smartRepeat: false;
   workoutSteps: GarminExecutableStep[];
 }
-type GarminWorkoutStep = Gartype GartableStep | GarminRepetype GarminWorkoce GarminWorkout {
-  workoutId: null; workoutName: string  workoutId: null; worko sportType: { sportTypeId: 1; sportTypeKey: 'running' };
-  workoutSegments: [{ segmentOrder: 1; sportType: { sportTypeId: 1; sportTypeKey: 'running' }; workoutSteps: GarminWorkoutStep[] }];
+type GarminWorkoutStep = GarminExecutableStep | GarminRepeatGroup;
+interface GarminWorkout {
+  workoutId: null;
+  workoutName: string;
+  description: string;
+  sportType: { sportTypeId: 1; sportTypeKey: 'running' };
+  workoutSegments: [{
+    segmentOrder: 1;
+    sportType: { sportTypeId: 1; sportTypeKey: 'running' };
+    workoutSteps: GarminWorkoutStep[];
+  }];
 }
 
-// ─── Conversión ParsedWorkout → GarminWorkout ─────�// ─── Conversión ParsedWorkout → GarminWorkout ─────�// └�─
+// ─── Conversion helpers ───────────────────────────────────────────────────────
 
 const GC_API = 'https://connectapi.garmin.com';
-
 let stepOrderCounter = 0;
 
 function buildExecutableStep(step: ParsedStep): GarminExecutableStep {
@@ -72,7 +88,8 @@ function buildExecutableStep(step: ParsedStep): GarminExecutableStep {
     stepOrder: stepOrderCounter,
     childStepId: null,
     description: step.description,
-    stepType: { stepTypeId: STEP_    stepType: { stepTypeId: STEP_    stepType: {yp    stepType: { stepTypeId: STEP_   peId: END_CONDITION_IDS[step.endCondition], conditionTypeKey: step.endCondition },
+    stepType: { stepTypeId: STEP_TYPE_IDS[step.stepType], stepTypeKey: step.stepType },
+    endCondition: { conditionTypeId: END_CONDITION_IDS[step.endCondition], conditionTypeKey: step.endCondition },
     preferredEndConditionUnit: { unitKey },
     endConditionValue: step.endConditionValue,
     endConditionCompare: null,
@@ -86,13 +103,18 @@ function buildExecutableStep(step: ParsedStep): GarminExecutableStep {
 
 function buildRepeatGroup(group: ParsedRepeatGroup, childStepId: number): GarminRepeatGroup {
   stepOrderCounter++;
-  const group  const group  const group  const group  const group  const group  cost  const group  constOr  const group  const group  const group  const group  const group  consfI  constns,
+  return {
+    type: 'RepeatGroupDTO',
+    stepId: null,
+    stepOrder: stepOrderCounter,
+    childStepId,
+    numberOfIterations: group.numberOfIterations,
     smartRepeat: false,
     workoutSteps: group.steps.map(s => buildExecutableStep(s)),
   };
 }
 
-function function functioarsed: ParsedWorkout): GarminWorkout {
+function parsedToGarmin(parsed: ParsedWorkout): GarminWorkout {
   stepOrderCounter = 0;
   let childCounter = 1;
   const steps: GarminWorkoutStep[] = [];
@@ -103,7 +125,7 @@ function function functioarsed: ParsedWorkout): GarminWorkout {
   return {
     workoutId: null,
     workoutName: parsed.name,
-    description: 'Creado con Garmin Workout Loader – © Martín Angeleri',
+    description: 'Creado con Garmin Workout Loader \u2013 \u00a9 Mart\u00edn Angeleri',
     sportType: { sportTypeId: 1, sportTypeKey: 'running' },
     workoutSegments: [{
       segmentOrder: 1,
@@ -113,12 +135,21 @@ function function functioarsed: ParsedWorkout): GarminWorkout {
   };
 }
 
-// ─── Handler ──────�// ─── Handler ──────�// ─── Handler ──────�// ─── Handler ──────�// ─── Handler ──────�// ─── Handler ──�default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+// ─── Handler ─────────────────────────────────────────────────────────────────
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   const { workout, accessToken } = req.body ?? {};
-  if (!workout || typeof workout !== 'object') return res.status(400).json({ error: 'El campo "workout" es requerido.' });
-  if (!accessToken || typeof accessToken !== 'string') return res.status(400).json({ error: 'Token de Garmin requerido. Reconectá tu cuenta.' });
+
+  if (!workout || typeof workout !== 'object') {
+    return res.status(400).json({ error: 'El campo "workout" es requerido.' });
+  }
+  if (!accessToken || typeof accessToken !== 'string') {
+    return res.status(400).json({ error: 'Token de Garmin requerido. Reconect\u00e1 tu cuenta.' });
+  }
 
   try {
     const garminWorkout = parsedToGarmin(workout as ParsedWorkout);
@@ -139,14 +170,28 @@ function function functioarsed: ParsedWorkout): GarminWorkout {
     console.log('[upload-workout] Garmin response', uploadRes.status, uploadText.slice(0, 300));
 
     if (uploadRes.status === 401) {
-      return res.status(401).json({ error: 'Token de Garmin expirado o inválido. Reconectá tu cuenta desde la configuración.' });
+      return res.status(401).json({
+        error: 'Token de Garmin expirado o inv\u00e1lido. Reconect\u00e1 tu cuenta desde la configuraci\u00f3n.',
+      });
     }
     if (!uploadRes.ok) {
-      return res.status(502).json({ er      return res.status(502).json({ er      return res.status(502).json({ er      return res.status(502).json({ er      return res.status(502).jsrd<     g,       return res.status(502).json({ er      return res.status(502 0) as number;
+      return res.status(502).json({
+        error: `Error de Garmin (${uploadRes.status}): ${uploadText.slice(0, 200)}`,
+      });
+    }
+
+    let uploadData: Record<string, unknown>;
+    try {
+      uploadData = JSON.parse(uploadText);
+    } catch {
+      return res.status(502).json({ error: 'Respuesta inv\u00e1lida de Garmin.' });
+    }
+
+    const workoutId = (uploadData.workoutId ?? 0) as number;
     return res.status(200).json({ workoutId, workoutName: garminWorkout.workoutName });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[upload-workout] Error:', msg);
-                                         'Err                  kout: ' + msg });
+    return res.status(500).json({ error: 'Error al subir el workout: ' + msg });
   }
 }

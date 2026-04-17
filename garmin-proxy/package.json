@@ -1,0 +1,13 @@
+{
+  "name": "garmin-auth-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Proxy local para autenticacion con Garmin Connect (corre en IP residencial)",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

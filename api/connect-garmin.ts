@@ -212,6 +212,40 @@ async function garminGetBearerToken(email: string, password: string): Promise<{ 
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
+// ─── Proxy residencial (opcional) ────────────────────────────────────────────
+// Si GARMIN_AUTH_PROXY_URL está configurado, delega el SSO al servidor local
+// corriendo en una PC con IP residencial para evitar el bloqueo de Cloudflare.
+
+async function garminGetBearerTokenViaProxy(
+  email: string,
+  password: string,
+  proxyUrl: string,
+  proxyApiKey: string
+): Promise<{ accessToken: string; expiresAt: number }> {
+  const url = proxyUrl.replace(/\/$/, '') + '/connect-garmin';
+  console.log('[connect-garmin] Usando proxy residencial:', proxyUrl);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Api-Key': proxyApiKey,
+    },
+    body: JSON.stringify({ email, password }),
+    signal: AbortSignal.timeout(55_000),
+  });
+
+  const data = await res.json() as { accessToken?: string; expiresAt?: number; error?: string };
+
+  if (!res.ok || !data.accessToken) {
+    throw new Error(data.error ?? `Proxy respondió con error ${res.status}`);
+  }
+
+  return { accessToken: data.accessToken, expiresAt: data.expiresAt ?? Date.now() + 365 * 24 * 60 * 60 * 1000 };
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -219,16 +253,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!email || typeof email !== 'string' || !email.includes('@')) return res.status(400).json({ error: 'Email inválido.' });
   if (!password || typeof password !== 'string') return res.status(400).json({ error: 'Contraseña requerida.' });
 
+  const proxyUrl    = process.env.GARMIN_AUTH_PROXY_URL ?? '';
+  const proxyApiKey = process.env.GARMIN_PROXY_API_KEY ?? '';
+
   try {
-    console.log('[connect-garmin] Conectando cuenta:', email);
-    const { accessToken, expiresAt } = await garminGetBearerToken(email, password);
+    let accessToken: string;
+    let expiresAt: number;
+
+    if (proxyUrl && proxyApiKey) {
+      console.log('[connect-garmin] Conectando via proxy residencial para:', email);
+      ({ accessToken, expiresAt } = await garminGetBearerTokenViaProxy(email, password, proxyUrl, proxyApiKey));
+    } else {
+      console.log('[connect-garmin] Conectando directo (sin proxy) para:', email);
+      ({ accessToken, expiresAt } = await garminGetBearerToken(email, password));
+    }
+
     console.log('[connect-garmin] Token obtenido OK, expira:', new Date(expiresAt).toISOString());
     return res.status(200).json({ accessToken, expiresAt });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[connect-garmin] Error:', msg);
     const is401 = msg.includes('incorrectas') || msg.includes('incorrectos');
-    const is429 = msg.includes('429') || msg.includes('bloqueando');
+    const is429 = msg.includes('429') || msg.includes('bloqueando') || msg.includes('RATE_LIMITED');
     return res.status(is401 ? 401 : is429 ? 429 : 502).json({ error: msg });
   }
 }
