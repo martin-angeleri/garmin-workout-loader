@@ -4,7 +4,7 @@
 :: La misma clave hay que ponerla en las variables de entorno de Vercel.
 
 set GARMIN_PROXY_API_KEY=CAMBIA_ESTO_POR_UNA_CLAVE_SECRETA
-set PORT=80
+set PORT=3001
 
 echo.
 echo  Garmin Auth Proxy
