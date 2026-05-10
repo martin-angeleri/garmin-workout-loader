@@ -29,8 +29,8 @@ export function useCredentials() {
 
   const isTokenExpired = useCallback(() => {
     if (!credentials) return true;
-    // Considerar expirado si quedan menos de 7 días
-    return credentials.tokenExpiresAt < Date.now() + 7 * 24 * 60 * 60 * 1000;
+    // Considerar expirado si quedan menos de 5 minutos
+    return credentials.tokenExpiresAt < Date.now() + 5 * 60 * 1000;
   }, [credentials]);
 
   return { credentials, save, clear, isConfigured: credentials !== null, isTokenExpired };

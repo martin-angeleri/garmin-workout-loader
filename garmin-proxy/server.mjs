@@ -210,9 +210,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`
-Garmin Auth Proxy corriendo en http://0.0.0.0:${PORT}`);
+  console.log('');
+  console.log('Garmin Auth Proxy corriendo en http://0.0.0.0:' + PORT);
   console.log('Endpoint: POST /connect-garmin');
-  console.log('Listo para recibir pedidos de Vercel.
-');
+  console.log('Listo para recibir pedidos de Vercel.');
+  console.log('');
 });

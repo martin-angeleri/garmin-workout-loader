@@ -3,7 +3,7 @@
 :: Editá GARMIN_PROXY_API_KEY con una clave secreta cualquiera (inventala vos).
 :: La misma clave hay que ponerla en las variables de entorno de Vercel.
 
-set GARMIN_PROXY_API_KEY=CAMBIA_ESTO_POR_UNA_CLAVE_SECRETA
+set GARMIN_PROXY_API_KEY=REINACABEZA_SECRET_KEY
 set PORT=3001
 
 echo.
