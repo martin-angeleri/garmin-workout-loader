@@ -19,6 +19,7 @@ export default function App() {
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [inputText, setInputText] = useState('');
+  const [correcting, setCorrecting] = useState(false);
 
   const handleParse = async (text: string) => {
     setInputText(text);
@@ -42,7 +43,7 @@ export default function App() {
 
   const handleCorrect = async (correction: string) => {
     if (!parsedWorkout) return;
-    setStatus('parsing');
+    setCorrecting(true);
     setErrorMessage('');
     try {
       const res = await fetch('/api/correct-workout', {
@@ -57,10 +58,10 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error al corregir el entrenamiento.');
       setParsedWorkout(data as ParsedWorkout);
-      setStatus('parsed');
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error inesperado.');
-      setStatus('error');
+    } finally {
+      setCorrecting(false);
     }
   };
 
@@ -232,6 +233,7 @@ export default function App() {
             onUpload={handleUpload}
             onBack={() => setStatus('idle')}
             onCorrect={handleCorrect}
+            correcting={correcting}
             uploading={status === 'uploading'}
             email={credentials?.email ?? ''}
           />

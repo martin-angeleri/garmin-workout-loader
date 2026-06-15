@@ -298,11 +298,12 @@ interface Props {
   onUpload: () => void;
   onBack: () => void;
   onCorrect: (instruction: string) => void;
+  correcting: boolean;
   uploading: boolean;
   email: string;
 }
 
-export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack, onCorrect, uploading, email }: Props) {
+export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack, onCorrect, correcting, uploading, email }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(workout.name);
   // Tracks which block index (0-based) is currently being edited; null = none
@@ -321,7 +322,28 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
   const getBlockLabel = (index: number) => `Bloque ${index + 1}`;
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-5">
+    <div className="w-full max-w-2xl mx-auto space-y-5" style={{ position: 'relative' }}>
+
+      {/* Correction loading overlay */}
+      {correcting && (
+        <div
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 rounded-2xl"
+          style={{ background: 'rgba(15,15,16,0.85)', backdropFilter: 'blur(4px)' }}
+        >
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center"
+            style={{ background: 'rgba(233,30,140,0.12)', border: '1px solid rgba(233,30,140,0.3)' }}
+          >
+            <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="#E91E8C" strokeWidth="2.5" strokeDasharray="50" strokeDashoffset="20"/>
+            </svg>
+          </div>
+          <div className="text-center">
+            <p className="text-base font-semibold" style={{ color: '#E8E8EA' }}>Aplicando correcciones...</p>
+            <p className="text-sm mt-1" style={{ color: '#666' }}>La IA está ajustando tu entrenamiento</p>
+          </div>
+        </div>
+      )}
 
       {/* Header row */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
