@@ -71,6 +71,67 @@ function formatCondition(step: ParsedStep): string {
   return 'Hasta botón';
 }
 
+// ─── Duration / Distance estimation ──────────────────────────────────────────
+// Pace per meter in seconds, by step type (used when endCondition is 'distance')
+const SEC_PER_METER: Record<string, number> = {
+  warmup:   7 * 60 / 1000,   // 7:00/km
+  cooldown: 7 * 60 / 1000,   // 7:00/km
+  interval: 5 * 60 / 1000,   // 5:00/km
+  recovery: 7 * 60 / 1000,   // 7:00/km
+  rest:     8 * 60 / 1000,   // 8:00/km (walk)
+  other:    6 * 60 / 1000,   // 6:00/km
+};
+
+function estimateStep(step: ParsedStep): { seconds: number; meters: number; isEstimate: boolean } {
+  if (step.endCondition === 'time' && step.endConditionValue) {
+    // Time known — estimate distance from pace
+    const pace = SEC_PER_METER[step.stepType] ?? (6 * 60 / 1000);
+    const meters = step.endConditionValue / pace;
+    return { seconds: step.endConditionValue, meters, isEstimate: true };
+  }
+  if (step.endCondition === 'distance' && step.endConditionValue) {
+    // Distance known — estimate time from pace
+    const pace = SEC_PER_METER[step.stepType] ?? (6 * 60 / 1000);
+    return { seconds: Math.round(step.endConditionValue * pace), meters: step.endConditionValue, isEstimate: true };
+  }
+  // lap.button — can't estimate
+  return { seconds: 0, meters: 0, isEstimate: true };
+}
+
+function calcWorkoutStats(steps: ParsedWorkoutStep[]): { seconds: number; meters: number; hasEstimate: boolean } {
+  let seconds = 0;
+  let meters = 0;
+  let hasEstimate = false;
+  for (const s of steps) {
+    if (s.type === 'repeat') {
+      for (const inner of s.steps) {
+        const e = estimateStep(inner);
+        seconds += e.seconds * s.numberOfIterations;
+        meters  += e.meters  * s.numberOfIterations;
+        if (e.isEstimate) hasEstimate = true;
+      }
+    } else {
+      const e = estimateStep(s);
+      seconds += e.seconds;
+      meters  += e.meters;
+      if (e.isEstimate) hasEstimate = true;
+    }
+  }
+  return { seconds, meters, hasEstimate };
+}
+
+function formatDuration(seconds: number): string {
+  const h   = Math.floor(seconds / 3600);
+  const min = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${min > 0 ? `${min}min` : ''}`;
+  return `${min}min`;
+}
+
+function formatDistance(meters: number): string {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.round(meters)} m`;
+}
+
 // ─── Inline correction panel ──────────────────────────────────────────────────
 
 interface CorrectionPanelProps {
@@ -319,6 +380,8 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
     return acc + 1;
   }, 0);
 
+  const { seconds: estSeconds, meters: estMeters, hasEstimate } = calcWorkoutStats(workout.steps);
+
   const getBlockLabel = (index: number) => `Bloque ${index + 1}`;
 
   return (
@@ -400,7 +463,30 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
             </button>
           </div>
         )}
-        <p className="text-xs mt-1.5" style={{ color: '#555' }}>{totalSteps} pasos · Running</p>
+        <div className="flex items-center gap-3 mt-2 flex-wrap">
+          <span className="text-xs" style={{ color: '#555' }}>{totalSteps} pasos · Running</span>
+          {estSeconds > 0 && (
+            <>
+              <span style={{ color: '#333' }}>·</span>
+              <span className="inline-flex items-center gap-1 text-xs" style={{ color: '#888' }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.7 }}>
+                  <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+                </svg>
+                {hasEstimate ? '~' : ''}{formatDuration(estSeconds)}
+              </span>
+              <span style={{ color: '#333' }}>·</span>
+              <span className="inline-flex items-center gap-1 text-xs" style={{ color: '#888' }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.7 }}>
+                  <path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/>
+                </svg>
+                {hasEstimate ? '~' : ''}{formatDistance(estMeters)}
+              </span>
+            </>
+          )}
+          {hasEstimate && (
+            <span className="text-xs" style={{ color: '#444', fontStyle: 'italic' }}>estimado</span>
+          )}
+        </div>
       </div>
 
       {/* Steps */}
