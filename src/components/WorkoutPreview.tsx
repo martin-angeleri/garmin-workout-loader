@@ -33,6 +33,30 @@ const STEP_ICONS: Record<string, React.ReactNode> = {
   other: <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>,
 };
 
+// ─── AI Edit Icon ─────────────────────────────────────────────────────────────
+
+function AIEditIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      {/* Pencil body */}
+      <path
+        d="M14.5 3.5L20.5 9.5L9 21H3V15L14.5 3.5Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="M14.5 3.5L20.5 9.5" stroke="currentColor" strokeWidth="1.8"/>
+      {/* AI sparkle — top right */}
+      <path
+        d="M21 2L21.7 3.3L23 4L21.7 4.7L21 6L20.3 4.7L19 4L20.3 3.3L21 2Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function formatCondition(step: ParsedStep): string {
   if (step.endCondition === 'time' && step.endConditionValue) {
     const secs = step.endConditionValue;
@@ -47,111 +71,242 @@ function formatCondition(step: ParsedStep): string {
   return 'Hasta botón';
 }
 
-function formatTarget(step: ParsedStep): string | null {
-  if (step.targetType === 'no.target') return null;
-  if (step.targetType === 'heart.rate.zone' && step.targetValueOne && step.targetValueTwo) {
-    return `FC ${step.targetValueOne}–${step.targetValueTwo} bpm`;
-  }
-  if (step.targetType === 'speed.zone' && step.targetValueOne && step.targetValueTwo) {
-    const toPace = (ms: number) => {
-      const secPerKm = 1000 / ms;
-      return `${Math.floor(secPerKm / 60)}:${String(Math.round(secPerKm % 60)).padStart(2, '0')}/km`;
-    };
-    return `${toPace(step.targetValueTwo)} – ${toPace(step.targetValueOne)}`;
-  }
-  return null;
+// ─── Inline correction panel ──────────────────────────────────────────────────
+
+interface CorrectionPanelProps {
+  blockLabel: string;
+  onSubmit: (instruction: string) => void;
+  onCancel: () => void;
 }
 
-function StepCard({ step, isNested }: { step: ParsedStep; index?: number; isNested?: boolean }) {
-  const color = STEP_COLORS[step.stepType] ?? '#888';
-  const condition = formatCondition(step);
-  const target = formatTarget(step);
+function CorrectionPanel({ blockLabel, onSubmit, onCancel }: CorrectionPanelProps) {
+  const [text, setText] = useState('');
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => { ref.current?.focus(); }, []);
+
+  const handleSubmit = () => {
+    if (!text.trim()) return;
+    onSubmit(`${blockLabel}: ${text.trim()}`);
+    setText('');
+  };
 
   return (
     <div
-      className="step-card flex items-start gap-3 p-3.5 rounded-xl"
-      style={{ background: isNested ? '#141416' : '#1A1A1C', border: `1px solid #2A2A2C` }}
+      className="mt-2 rounded-xl p-3"
+      style={{ background: '#0F0F10', border: '1.5px solid rgba(233,30,140,0.4)' }}
     >
-      <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-           style={{ background: `${color}20`, color }}>
-        {STEP_ICONS[step.stepType]}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color }}>
-            {STEP_LABELS[step.stepType] ?? step.stepType}
-          </span>
-          <span className="text-sm font-bold" style={{ color: '#E8E8EA' }}>
-            {condition}
-          </span>
+      <p className="text-xs mb-2" style={{ color: '#AAA' }}>
+        ¿Qué querés cambiar en <strong style={{ color: '#E91E8C' }}>{blockLabel}</strong>?
+      </p>
+      <textarea
+        ref={ref}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder={`Ej: "son 5 repeticiones, no 4" · "el intervalo debería ser 500m" · "agregar una recuperación de 90s"`}
+        rows={2}
+        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(); }}
+        className="w-full px-3 py-2 rounded-lg text-sm resize-none"
+        style={{
+          background: '#1A1A1C',
+          border: '1px solid #3A3A3C',
+          color: '#E8E8EA',
+          outline: 'none',
+          fontFamily: 'inherit',
+        }}
+        onFocus={e => { e.currentTarget.style.borderColor = '#E91E8C'; }}
+        onBlur={e => { e.currentTarget.style.borderColor = '#3A3A3C'; }}
+      />
+      <div className="flex items-center justify-between mt-2 gap-2">
+        <span className="text-xs" style={{ color: '#555' }}>⌘ + Enter para aplicar</span>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium"
+            style={{ background: '#2A2A2C', color: '#AAAAAA' }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!text.trim()}
+            className="px-4 py-1.5 rounded-lg text-xs font-semibold"
+            style={{
+              background: text.trim() ? 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)' : '#2A2A2C',
+              color: text.trim() ? '#fff' : '#555',
+              cursor: text.trim() ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Aplicar con IA
+          </button>
         </div>
-        {step.description && (
-          <p className="text-xs mt-1 leading-snug" style={{ color: '#888' }}>
-            {step.description}
-          </p>
-        )}
-        {target && (
-          <span className="inline-flex items-center gap-1 mt-1.5 text-xs px-2 py-0.5 rounded-md font-medium"
-                style={{ background: `${color}15`, color }}>
-            🎯 {target}
-          </span>
-        )}
       </div>
     </div>
   );
 }
 
-function RepeatGroupCard({ group }: { group: ParsedRepeatGroup; groupIndex?: number }) {
+// ─── Step Card ────────────────────────────────────────────────────────────────
+
+function StepCard({
+  step,
+  isNested,
+  blockLabel,
+  onCorrect,
+  editingThis,
+  onStartEdit,
+  onCancelEdit,
+}: {
+  step: ParsedStep;
+  isNested?: boolean;
+  blockLabel?: string;
+  onCorrect?: (instruction: string) => void;
+  editingThis?: boolean;
+  onStartEdit?: () => void;
+  onCancelEdit?: () => void;
+}) {
+  const color = STEP_COLORS[step.stepType] ?? '#888';
+  const condition = formatCondition(step);
+
   return (
-    <div className="step-card rounded-xl overflow-hidden" style={{ border: '1.5px solid rgba(233,30,140,0.35)' }}>
-      <div className="flex items-center gap-2 px-4 py-2.5"
-           style={{ background: 'rgba(233,30,140,0.1)' }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="#E91E8C">
-          <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
-        </svg>
-        <span className="text-sm font-bold" style={{ color: '#E91E8C' }}>
-          {group.numberOfIterations} repeticiones
-        </span>
+    <div>
+      <div
+        className="step-card flex items-start gap-3 p-3.5 rounded-xl"
+        style={{ background: isNested ? '#141416' : '#1A1A1C', border: `1px solid #2A2A2C` }}
+      >
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+             style={{ background: `${color}20`, color }}>
+          {STEP_ICONS[step.stepType]}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color }}>
+              {STEP_LABELS[step.stepType] ?? step.stepType}
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold" style={{ color: '#E8E8EA' }}>
+                {condition}
+              </span>
+              {!isNested && blockLabel && onCorrect && (
+                <button
+                  onClick={onStartEdit}
+                  title="Corregir con IA"
+                  className="flex items-center justify-center w-6 h-6 rounded-md transition-all"
+                  style={{
+                    background: editingThis ? 'rgba(233,30,140,0.2)' : 'rgba(233,30,140,0.08)',
+                    color: '#E91E8C',
+                    border: '1px solid rgba(233,30,140,0.25)',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.2)'; }}
+                  onMouseLeave={e => { if (!editingThis) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.08)'; }}
+                >
+                  <AIEditIcon />
+                </button>
+              )}
+            </div>
+          </div>
+          {step.description && (
+            <p className="text-xs mt-1 leading-snug" style={{ color: '#888' }}>
+              {step.description}
+            </p>
+          )}
+        </div>
       </div>
-      <div className="p-3 space-y-2" style={{ background: '#131315' }}>
-        {group.steps.map((step, i) => (
-          <StepCard key={i} step={step} index={i} isNested />
-        ))}
-      </div>
+      {editingThis && blockLabel && onCorrect && onCancelEdit && (
+        <CorrectionPanel
+          blockLabel={blockLabel}
+          onSubmit={onCorrect}
+          onCancel={onCancelEdit}
+        />
+      )}
     </div>
   );
 }
+
+// ─── Repeat Group Card ────────────────────────────────────────────────────────
+
+function RepeatGroupCard({
+  group,
+  blockLabel,
+  onCorrect,
+  editingThis,
+  onStartEdit,
+  onCancelEdit,
+}: {
+  group: ParsedRepeatGroup;
+  blockLabel: string;
+  onCorrect: (instruction: string) => void;
+  editingThis: boolean;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+}) {
+  return (
+    <div>
+      <div className="step-card rounded-xl overflow-hidden" style={{ border: '1.5px solid rgba(233,30,140,0.35)' }}>
+        {/* Header */}
+        <div
+          className="flex items-center justify-between gap-2 px-4 py-2.5"
+          style={{ background: 'rgba(233,30,140,0.1)' }}
+        >
+          <div className="flex items-center gap-2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="#E91E8C">
+              <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+            </svg>
+            <span className="text-sm font-bold" style={{ color: '#E91E8C' }}>
+              {group.numberOfIterations} repeticiones
+            </span>
+          </div>
+          {/* AI Edit button */}
+          <button
+            onClick={onStartEdit}
+            title="Corregir este bloque con IA"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+            style={{
+              background: editingThis ? 'rgba(233,30,140,0.25)' : 'rgba(233,30,140,0.12)',
+              color: '#E91E8C',
+              border: '1px solid rgba(233,30,140,0.3)',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.25)'; }}
+            onMouseLeave={e => { if (!editingThis) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.12)'; }}
+          >
+            <AIEditIcon />
+            <span>Editar</span>
+          </button>
+        </div>
+        {/* Steps inside */}
+        <div className="p-3 space-y-2" style={{ background: '#131315' }}>
+          {group.steps.map((step, i) => (
+            <StepCard key={i} step={step} isNested />
+          ))}
+        </div>
+      </div>
+      {editingThis && (
+        <CorrectionPanel
+          blockLabel={blockLabel}
+          onSubmit={onCorrect}
+          onCancel={onCancelEdit}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 interface Props {
   workout: ParsedWorkout;
   onNameChange: (name: string) => void;
   onUpload: () => void;
   onBack: () => void;
-  onReparse: () => void;
   onCorrect: (instruction: string) => void;
   uploading: boolean;
   email: string;
 }
 
-export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack, onReparse, onCorrect, uploading, email }: Props) {
+export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack, onCorrect, uploading, email }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(workout.name);
-  const [showCorrection, setShowCorrection] = useState(false);
-  const [correctionText, setCorrectionText] = useState('');
-  const correctionRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (showCorrection && correctionRef.current) {
-      correctionRef.current.focus();
-    }
-  }, [showCorrection]);
-
-  const handleCorrectSubmit = () => {
-    if (!correctionText.trim()) return;
-    onCorrect(correctionText.trim());
-    setCorrectionText('');
-    setShowCorrection(false);
-  };
+  // Tracks which block index (0-based) is currently being edited; null = none
+  const [editingBlock, setEditingBlock] = useState<number | null>(null);
 
   const saveNameEdit = () => {
     if (nameInput.trim()) onNameChange(nameInput.trim());
@@ -162,6 +317,8 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
     if (s.type === 'repeat') return acc + s.steps.length * s.numberOfIterations + 1;
     return acc + 1;
   }, 0);
+
+  const getBlockLabel = (index: number) => `Bloque ${index + 1}`;
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-5">
@@ -178,22 +335,10 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
           Editar texto
         </button>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <button
-            onClick={onReparse}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all"
-            style={{ background: 'rgba(233,30,140,0.08)', color: '#E91E8C', border: '1px solid rgba(233,30,140,0.25)' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.18)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.08)'; }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
-            Re-interpretar
-          </button>
-          <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full"
-               style={{ background: 'rgba(48,209,88,0.1)', color: '#30D158', border: '1px solid rgba(48,209,88,0.2)' }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-            Interpretado
-          </div>
+        <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full"
+             style={{ background: 'rgba(48,209,88,0.1)', color: '#30D158', border: '1px solid rgba(48,209,88,0.2)' }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+          Interpretado
         </div>
       </div>
 
@@ -237,96 +382,63 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
       </div>
 
       {/* Steps */}
-      <div className="space-y-2.5">
+      <div className="space-y-3">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-1.5 h-5 rounded-full" style={{ background: '#E91E8C' }} />
           <h2 className="text-sm font-semibold" style={{ color: '#E8E8EA' }}>Pasos del entrenamiento</h2>
         </div>
-        {workout.steps.map((step: ParsedWorkoutStep, i: number) =>
-          step.type === 'repeat'
-            ? <RepeatGroupCard key={i} group={step} groupIndex={i} />
-            : <StepCard key={i} step={step} index={i} />
-        )}
-      </div>
 
-      {/* Correction panel */}
-      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #2A2A2C' }}>
-        <button
-          onClick={() => setShowCorrection(v => !v)}
-          className="w-full flex items-center justify-between gap-2 px-4 py-3 transition-colors"
-          style={{ background: showCorrection ? '#1E1C20' : '#141416' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1E1C20'; }}
-          onMouseLeave={e => { if (!showCorrection) (e.currentTarget as HTMLButtonElement).style.background = '#141416'; }}
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center"
-                 style={{ background: 'rgba(233,30,140,0.15)' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E91E8C" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </div>
-            <span className="text-sm font-semibold" style={{ color: '#E8E8EA' }}>Corregir entrenamiento con IA</span>
-          </div>
-          <svg
-            width="16" height="16" viewBox="0 0 24 24" fill="#666"
-            style={{ transform: showCorrection ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
-          >
-            <path d="M7 10l5 5 5-5z"/>
-          </svg>
-        </button>
+        {workout.steps.map((step: ParsedWorkoutStep, i: number) => {
+          const blockLabel = getBlockLabel(i);
+          const isEditing = editingBlock === i;
+          const startEdit = () => setEditingBlock(isEditing ? null : i);
+          const cancelEdit = () => setEditingBlock(null);
 
-        {showCorrection && (
-          <div className="px-4 pb-4 pt-1" style={{ background: '#141416' }}>
-            <p className="text-xs mb-2.5" style={{ color: '#888' }}>
-              Describí qué querés cambiar en lenguaje natural. Por ejemplo: <em style={{ color: '#AAA' }}>"la actividad 3 va dentro del bloque de 4 repeticiones"</em>, <em style={{ color: '#AAA' }}>"son 5 repeticiones, no 4"</em>, <em style={{ color: '#AAA' }}>"el intervalo debería ser de 500m"</em>.
-            </p>
-            <textarea
-              ref={correctionRef}
-              value={correctionText}
-              onChange={e => setCorrectionText(e.target.value)}
-              placeholder="Describí la corrección..."
-              rows={3}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleCorrectSubmit();
-              }}
-              className="w-full px-3 py-2.5 rounded-xl text-sm resize-none"
-              style={{
-                background: '#0F0F10',
-                border: '1.5px solid #3A3A3C',
-                color: '#E8E8EA',
-                outline: 'none',
-                fontFamily: 'inherit',
-              }}
-              onFocus={e => { e.currentTarget.style.borderColor = '#E91E8C'; }}
-              onBlur={e => { e.currentTarget.style.borderColor = '#3A3A3C'; }}
-            />
-            <div className="flex items-center justify-between mt-2.5 gap-2">
-              <span className="text-xs" style={{ color: '#555' }}>⌘ + Enter para aplicar</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { setShowCorrection(false); setCorrectionText(''); }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                  style={{ background: '#2A2A2C', color: '#AAAAAA' }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleCorrectSubmit}
-                  disabled={!correctionText.trim()}
-                  className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+          return (
+            <div key={i}>
+              {/* Block label */}
+              <div className="flex items-center gap-1.5 mb-1.5 ml-0.5">
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded-md"
                   style={{
-                    background: correctionText.trim() ? 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)' : '#2A2A2C',
-                    color: correctionText.trim() ? '#fff' : '#555',
-                    cursor: correctionText.trim() ? 'pointer' : 'not-allowed',
+                    background: 'rgba(233,30,140,0.08)',
+                    color: '#E91E8C',
+                    border: '1px solid rgba(233,30,140,0.18)',
+                    letterSpacing: '0.04em',
                   }}
                 >
-                  Aplicar corrección
-                </button>
+                  {blockLabel}
+                </span>
               </div>
+
+              {step.type === 'repeat' ? (
+                <RepeatGroupCard
+                  group={step}
+                  blockLabel={blockLabel}
+                  onCorrect={(instruction) => {
+                    setEditingBlock(null);
+                    onCorrect(instruction);
+                  }}
+                  editingThis={isEditing}
+                  onStartEdit={startEdit}
+                  onCancelEdit={cancelEdit}
+                />
+              ) : (
+                <StepCard
+                  step={step}
+                  blockLabel={blockLabel}
+                  onCorrect={(instruction) => {
+                    setEditingBlock(null);
+                    onCorrect(instruction);
+                  }}
+                  editingThis={isEditing}
+                  onStartEdit={startEdit}
+                  onCancelEdit={cancelEdit}
+                />
+              )}
             </div>
-          </div>
-        )}
+          );
+        })}
       </div>
 
       {/* Upload button */}
@@ -347,7 +459,7 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
           disabled={uploading}
           className="w-full py-4 rounded-xl text-base font-bold transition-all flex items-center justify-center gap-2.5"
           style={{
-          background: uploading ? '#2A2A2C' : 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)',
+            background: uploading ? '#2A2A2C' : 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)',
             color: uploading ? '#555' : '#fff',
             cursor: uploading ? 'not-allowed' : 'pointer',
           }}

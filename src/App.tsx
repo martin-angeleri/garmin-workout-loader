@@ -45,7 +45,7 @@ export default function App() {
     setStatus('parsing');
     setErrorMessage('');
     try {
-      const res = await fetch('/api/parse-workout', {
+      const res = await fetch('/api/correct-workout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -121,9 +121,6 @@ export default function App() {
     // No limpiamos inputText para que el usuario pueda reutilizarlo
   };
 
-  const handleReparse = () => {
-    if (inputText.trim()) handleParse(inputText);
-  };
 
   // Primera vez: sin credenciales
   if (showSetup) {
@@ -234,7 +231,6 @@ export default function App() {
             onNameChange={(name) => setParsedWorkout((prev) => (prev ? { ...prev, name } : prev))}
             onUpload={handleUpload}
             onBack={() => setStatus('idle')}
-            onReparse={handleReparse}
             onCorrect={handleCorrect}
             uploading={status === 'uploading'}
             email={credentials?.email ?? ''}
