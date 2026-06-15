@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type {
   ParsedWorkout,
   ParsedStep,
@@ -128,13 +128,30 @@ interface Props {
   onUpload: () => void;
   onBack: () => void;
   onReparse: () => void;
+  onCorrect: (instruction: string) => void;
   uploading: boolean;
   email: string;
 }
 
-export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack, onReparse, uploading, email }: Props) {
+export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack, onReparse, onCorrect, uploading, email }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(workout.name);
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [correctionText, setCorrectionText] = useState('');
+  const correctionRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (showCorrection && correctionRef.current) {
+      correctionRef.current.focus();
+    }
+  }, [showCorrection]);
+
+  const handleCorrectSubmit = () => {
+    if (!correctionText.trim()) return;
+    onCorrect(correctionText.trim());
+    setCorrectionText('');
+    setShowCorrection(false);
+  };
 
   const saveNameEdit = () => {
     if (nameInput.trim()) onNameChange(nameInput.trim());
@@ -229,6 +246,86 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
           step.type === 'repeat'
             ? <RepeatGroupCard key={i} group={step} groupIndex={i} />
             : <StepCard key={i} step={step} index={i} />
+        )}
+      </div>
+
+      {/* Correction panel */}
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #2A2A2C' }}>
+        <button
+          onClick={() => setShowCorrection(v => !v)}
+          className="w-full flex items-center justify-between gap-2 px-4 py-3 transition-colors"
+          style={{ background: showCorrection ? '#1E1C20' : '#141416' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1E1C20'; }}
+          onMouseLeave={e => { if (!showCorrection) (e.currentTarget as HTMLButtonElement).style.background = '#141416'; }}
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg flex items-center justify-center"
+                 style={{ background: 'rgba(233,30,140,0.15)' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E91E8C" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </div>
+            <span className="text-sm font-semibold" style={{ color: '#E8E8EA' }}>Corregir entrenamiento con IA</span>
+          </div>
+          <svg
+            width="16" height="16" viewBox="0 0 24 24" fill="#666"
+            style={{ transform: showCorrection ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+          >
+            <path d="M7 10l5 5 5-5z"/>
+          </svg>
+        </button>
+
+        {showCorrection && (
+          <div className="px-4 pb-4 pt-1" style={{ background: '#141416' }}>
+            <p className="text-xs mb-2.5" style={{ color: '#888' }}>
+              Describí qué querés cambiar en lenguaje natural. Por ejemplo: <em style={{ color: '#AAA' }}>"la actividad 3 va dentro del bloque de 4 repeticiones"</em>, <em style={{ color: '#AAA' }}>"son 5 repeticiones, no 4"</em>, <em style={{ color: '#AAA' }}>"el intervalo debería ser de 500m"</em>.
+            </p>
+            <textarea
+              ref={correctionRef}
+              value={correctionText}
+              onChange={e => setCorrectionText(e.target.value)}
+              placeholder="Describí la corrección..."
+              rows={3}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleCorrectSubmit();
+              }}
+              className="w-full px-3 py-2.5 rounded-xl text-sm resize-none"
+              style={{
+                background: '#0F0F10',
+                border: '1.5px solid #3A3A3C',
+                color: '#E8E8EA',
+                outline: 'none',
+                fontFamily: 'inherit',
+              }}
+              onFocus={e => { e.currentTarget.style.borderColor = '#E91E8C'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#3A3A3C'; }}
+            />
+            <div className="flex items-center justify-between mt-2.5 gap-2">
+              <span className="text-xs" style={{ color: '#555' }}>⌘ + Enter para aplicar</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowCorrection(false); setCorrectionText(''); }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                  style={{ background: '#2A2A2C', color: '#AAAAAA' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCorrectSubmit}
+                  disabled={!correctionText.trim()}
+                  className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{
+                    background: correctionText.trim() ? 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)' : '#2A2A2C',
+                    color: correctionText.trim() ? '#fff' : '#555',
+                    cursor: correctionText.trim() ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Aplicar corrección
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

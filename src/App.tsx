@@ -9,7 +9,9 @@ import type { ParsedWorkout, AppStatus, UploadResult } from './types/workout';
 
 export default function App() {
   const { credentials, save: saveCredentials, isConfigured, isTokenExpired } = useCredentials();
+  // Primer uso: sin credenciales. Token expirado: credenciales hay pero vencidas.
   const [showSetup, setShowSetup] = useState(!isConfigured);
+  const [tokenExpiredOnLoad] = useState(() => isConfigured && isTokenExpired());
   const [editingCredentials, setEditingCredentials] = useState(false);
 
   const [status, setStatus] = useState<AppStatus>('idle');
@@ -30,6 +32,30 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error al interpretar el entrenamiento.');
+      setParsedWorkout(data as ParsedWorkout);
+      setStatus('parsed');
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error inesperado.');
+      setStatus('error');
+    }
+  };
+
+  const handleCorrect = async (correction: string) => {
+    if (!parsedWorkout) return;
+    setStatus('parsing');
+    setErrorMessage('');
+    try {
+      const res = await fetch('/api/parse-workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalText: inputText,
+          currentWorkout: parsedWorkout,
+          correction
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error al corregir el entrenamiento.');
       setParsedWorkout(data as ParsedWorkout);
       setStatus('parsed');
     } catch (err: unknown) {
@@ -99,6 +125,7 @@ export default function App() {
     if (inputText.trim()) handleParse(inputText);
   };
 
+  // Primera vez: sin credenciales
   if (showSetup) {
     return (
       <CredentialsSetup
@@ -106,6 +133,22 @@ export default function App() {
         onSave={(creds) => {
           saveCredentials(creds);
           setShowSetup(false);
+        }}
+      />
+    );
+  }
+
+  // Token expirado al abrir la app: pedir reconexión antes de entrar
+  if (tokenExpiredOnLoad && !editingCredentials) {
+    return (
+      <CredentialsSetup
+        isFirstTime={false}
+        currentEmail={credentials?.email}
+        currentTokenExpiresAt={credentials?.tokenExpiresAt}
+        onSave={(creds) => {
+          saveCredentials(creds);
+          // Recargamos para limpiar el flag tokenExpiredOnLoad
+          window.location.reload();
         }}
       />
     );
@@ -192,6 +235,7 @@ export default function App() {
             onUpload={handleUpload}
             onBack={() => setStatus('idle')}
             onReparse={handleReparse}
+            onCorrect={handleCorrect}
             uploading={status === 'uploading'}
             email={credentials?.email ?? ''}
           />
