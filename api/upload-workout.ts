@@ -43,7 +43,7 @@ interface GarminExecutableStep {
   description: string;
   stepType: { stepTypeId: number; stepTypeKey: StepTypeKey };
   endCondition: { conditionTypeId: number; conditionTypeKey: EndConditionKey };
-  preferredEndConditionUnit: { unitKey: 'second' | 'meter' };
+  preferredEndConditionUnit: { unitId: number; unitKey: string; factor: number } | null;
   endConditionValue: number | null;
   endConditionCompare: null;
   endConditionZone: null;
@@ -67,6 +67,8 @@ interface GarminWorkout {
   workoutName: string;
   description: string;
   sportType: { sportTypeId: 1; sportTypeKey: 'running' };
+  estimatedDurationInSecs: number | null;
+  estimatedDistanceInMeters: number | null;
   workoutSegments: [{
     segmentOrder: 1;
     sportType: { sportTypeId: 1; sportTypeKey: 'running' };
@@ -81,7 +83,9 @@ let stepOrderCounter = 0;
 
 function buildExecutableStep(step: ParsedStep): GarminExecutableStep {
   stepOrderCounter++;
-  const unitKey = step.endCondition === 'distance' ? 'meter' : 'second';
+  const preferredEndConditionUnit = step.endCondition === 'distance'
+    ? { unitId: 1, unitKey: 'meter', factor: 100 }
+    : null;
   return {
     type: 'ExecutableStepDTO',
     stepId: null,
@@ -90,7 +94,7 @@ function buildExecutableStep(step: ParsedStep): GarminExecutableStep {
     description: step.description,
     stepType: { stepTypeId: STEP_TYPE_IDS[step.stepType], stepTypeKey: step.stepType },
     endCondition: { conditionTypeId: END_CONDITION_IDS[step.endCondition], conditionTypeKey: step.endCondition },
-    preferredEndConditionUnit: { unitKey },
+    preferredEndConditionUnit,
     endConditionValue: step.endConditionValue,
     endConditionCompare: null,
     endConditionZone: null,
@@ -114,6 +118,47 @@ function buildRepeatGroup(group: ParsedRepeatGroup, childStepId: number): Garmin
   };
 }
 
+const SEC_PER_METER: Record<string, number> = {
+  warmup:   7 * 60 / 1000,   // 7:00/km
+  cooldown: 7 * 60 / 1000,   // 7:00/km
+  interval: 5 * 60 / 1000,   // 5:00/km
+  recovery: 7 * 60 / 1000,   // 7:00/km
+  rest:     8 * 60 / 1000,   // 8:00/km
+  other:    6 * 60 / 1000,   // 6:00/km
+};
+
+function estimateStep(step: ParsedStep): { seconds: number; meters: number } {
+  if (step.endCondition === 'time' && step.endConditionValue) {
+    const pace = SEC_PER_METER[step.stepType] ?? (6 * 60 / 1000);
+    const meters = step.endConditionValue / pace;
+    return { seconds: step.endConditionValue, meters };
+  }
+  if (step.endCondition === 'distance' && step.endConditionValue) {
+    const pace = SEC_PER_METER[step.stepType] ?? (6 * 60 / 1000);
+    return { seconds: Math.round(step.endConditionValue * pace), meters: step.endConditionValue };
+  }
+  return { seconds: 0, meters: 0 };
+}
+
+function calcWorkoutStats(steps: (ParsedStep | ParsedRepeatGroup)[]): { seconds: number; meters: number } {
+  let seconds = 0;
+  let meters = 0;
+  for (const s of steps) {
+    if (s.type === 'repeat') {
+      for (const inner of s.steps) {
+        const e = estimateStep(inner);
+        seconds += e.seconds * s.numberOfIterations;
+        meters  += e.meters  * s.numberOfIterations;
+      }
+    } else {
+      const e = estimateStep(s as ParsedStep);
+      seconds += e.seconds;
+      meters  += e.meters;
+    }
+  }
+  return { seconds, meters };
+}
+
 function parsedToGarmin(parsed: ParsedWorkout): GarminWorkout {
   stepOrderCounter = 0;
   let childCounter = 1;
@@ -122,11 +167,14 @@ function parsedToGarmin(parsed: ParsedWorkout): GarminWorkout {
     if (s.type === 'step') steps.push(buildExecutableStep(s as ParsedStep));
     else steps.push(buildRepeatGroup(s as ParsedRepeatGroup, childCounter++));
   }
+  const stats = calcWorkoutStats(parsed.steps);
   return {
     workoutId: null,
     workoutName: parsed.name,
     description: 'Creado con Garmin Workout Loader \u2013 \u00a9 Mart\u00edn Angeleri',
     sportType: { sportTypeId: 1, sportTypeKey: 'running' },
+    estimatedDurationInSecs: stats.seconds > 0 ? stats.seconds : null,
+    estimatedDistanceInMeters: stats.meters > 0 ? Math.round(stats.meters) : null,
     workoutSegments: [{
       segmentOrder: 1,
       sportType: { sportTypeId: 1, sportTypeKey: 'running' },
