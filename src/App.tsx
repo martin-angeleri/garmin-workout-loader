@@ -10,7 +10,7 @@ import type { ParsedWorkout, AppStatus, UploadResult } from './types/workout';
 
 export default function App() {
   const { credentials, save: saveCredentials, isConfigured, isTokenExpired } = useCredentials();
-  
+
   const [showSetup, setShowSetup] = useState(!isConfigured);
   const [tokenExpiredOnLoad, setTokenExpiredOnLoad] = useState(() => isConfigured && isTokenExpired());
   const [editingCredentials, setEditingCredentials] = useState(false);
@@ -44,7 +44,7 @@ export default function App() {
               body: JSON.stringify({ email: credentials.email, password: credentials.password }),
             });
             const data = await res.json();
-            
+
             if (res.ok && data.accessToken) {
               saveCredentials({
                 email: credentials.email,
@@ -175,9 +175,9 @@ export default function App() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ background: '#0F0F10' }}>
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-             style={{ background: 'rgba(233,30,140,0.12)', border: '1px solid rgba(233,30,140,0.3)' }}>
+          style={{ background: 'rgba(233,30,140,0.12)', border: '1px solid rgba(233,30,140,0.3)' }}>
           <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="#E91E8C" strokeWidth="2.5" strokeDasharray="50" strokeDashoffset="20"/>
+            <circle cx="12" cy="12" r="10" stroke="#E91E8C" strokeWidth="2.5" strokeDasharray="50" strokeDashoffset="20" />
           </svg>
         </div>
         <h2 className="text-lg font-bold text-center mb-1" style={{ color: '#E8E8EA' }}>
@@ -271,7 +271,7 @@ export default function App() {
         ) : (
           /* AI Parser views */
           <div className="w-full max-w-2xl mx-auto space-y-4">
-            
+
             {/* Back to list button */}
             {(status === 'idle' || status === 'error') && (
               <button
@@ -294,10 +294,6 @@ export default function App() {
                   Cargá tu entrenamiento<br />
                   <span className="gradient-text">en Garmin en segundos</span>
                 </h1>
-                <p className="text-base leading-relaxed" style={{ color: '#666' }}>
-                  Escribí el entrenamiento como lo harías en un mensaje, y lo convertimos
-                  automáticamente al formato de Garmin Connect para que lo tengas en tu reloj.
-                </p>
               </div>
             )}
 

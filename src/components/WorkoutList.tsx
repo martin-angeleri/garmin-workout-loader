@@ -14,7 +14,9 @@ export function mapGarminToParsed(g: any): ParsedWorkout {
         stepType: (ws.stepType?.stepTypeKey || 'other') as StepTypeKey,
         description: ws.description || '',
         endCondition: (ws.endCondition?.conditionTypeKey || 'lap.button') as EndConditionKey,
-        endConditionValue: ws.endConditionValue,
+        endConditionValue: ws.endCondition?.conditionTypeKey === 'distance' && ws.endConditionValue
+          ? ws.endConditionValue / 100
+          : ws.endConditionValue,
         targetType: (ws.targetType?.workoutTargetTypeKey || 'no.target') as TargetTypeKey,
         targetValueOne: ws.targetValueOne,
         targetValueTwo: ws.targetValueTwo,
@@ -30,7 +32,9 @@ export function mapGarminToParsed(g: any): ParsedWorkout {
         stepType: (s.stepType?.stepTypeKey || 'other') as StepTypeKey,
         description: s.description || '',
         endCondition: (s.endCondition?.conditionTypeKey || 'lap.button') as EndConditionKey,
-        endConditionValue: s.endConditionValue,
+        endConditionValue: s.endCondition?.conditionTypeKey === 'distance' && s.endConditionValue
+          ? s.endConditionValue / 100
+          : s.endConditionValue,
         targetType: (s.targetType?.workoutTargetTypeKey || 'no.target') as TargetTypeKey,
         targetValueOne: s.targetValueOne,
         targetValueTwo: s.targetValueTwo,

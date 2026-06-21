@@ -43,7 +43,7 @@ export default function WorkoutInput({ onParse, loading, value, onChange }: Prop
       <div className="flex items-center gap-2 mb-3">
         <div className="w-1.5 h-5 rounded-full" style={{ background: '#E91E8C' }} />
         <h2 className="text-base font-semibold" style={{ color: '#E8E8EA' }}>
-          Describí tu entrenamiento
+          Describí tu entrenamiento como lo harías en un mensaje
         </h2>
       </div>
 

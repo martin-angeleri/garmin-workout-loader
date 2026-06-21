@@ -611,6 +611,25 @@ export default function WorkoutPreview({
             </div>
           </div>
 
+          {estSeconds > 0 && (
+            <div className="mb-4 p-3.5 rounded-xl flex items-center justify-around text-center gap-2"
+                 style={{ background: '#1A1A1C', border: '1px solid #2E2E30' }}>
+              <div>
+                <p className="text-[10px] uppercase font-bold tracking-wider mb-0.5" style={{ color: '#666' }}>Tiempo estimado</p>
+                <p className="text-sm font-bold" style={{ color: '#E8E8EA' }}>
+                  {hasEstimate ? '~' : ''}{formatDuration(estSeconds)}
+                </p>
+              </div>
+              <div className="w-px h-8" style={{ background: '#2E2E30' }} />
+              <div>
+                <p className="text-[10px] uppercase font-bold tracking-wider mb-0.5" style={{ color: '#666' }}>Distancia estimada</p>
+                <p className="text-sm font-bold" style={{ color: '#E8E8EA' }}>
+                  {hasEstimate ? '~' : ''}{formatDistance(estMeters)}
+                </p>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={onUpload}
             disabled={uploading}

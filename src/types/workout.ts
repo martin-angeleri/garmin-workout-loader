@@ -102,11 +102,15 @@ export interface GarminWorkout {
   workoutName: string;
   description: string;
   sportType: { sportTypeId: 1; sportTypeKey: 'running' };
+  estimatedDurationInSecs?: number | null;
+  estimatedDistanceInMeters?: number | null;
   workoutSegments: [
     {
       segmentOrder: 1;
       sportType: { sportTypeId: 1; sportTypeKey: 'running' };
       workoutSteps: GarminWorkoutStep[];
+      estimatedDurationInSecs?: number | null;
+      estimatedDistanceInMeters?: number | null;
     }
   ];
 }

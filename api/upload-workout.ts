@@ -73,6 +73,8 @@ interface GarminWorkout {
     segmentOrder: 1;
     sportType: { sportTypeId: 1; sportTypeKey: 'running' };
     workoutSteps: GarminWorkoutStep[];
+    estimatedDurationInSecs: number | null;
+    estimatedDistanceInMeters: number | null;
   }];
 }
 
@@ -95,7 +97,9 @@ function buildExecutableStep(step: ParsedStep): GarminExecutableStep {
     stepType: { stepTypeId: STEP_TYPE_IDS[step.stepType], stepTypeKey: step.stepType },
     endCondition: { conditionTypeId: END_CONDITION_IDS[step.endCondition], conditionTypeKey: step.endCondition },
     preferredEndConditionUnit,
-    endConditionValue: step.endConditionValue,
+    endConditionValue: step.endCondition === 'distance' && step.endConditionValue
+      ? step.endConditionValue * 100
+      : step.endConditionValue,
     endConditionCompare: null,
     endConditionZone: null,
     targetType: { workoutTargetTypeId: TARGET_TYPE_IDS[step.targetType], workoutTargetTypeKey: step.targetType },
@@ -179,6 +183,8 @@ function parsedToGarmin(parsed: ParsedWorkout): GarminWorkout {
       segmentOrder: 1,
       sportType: { sportTypeId: 1, sportTypeKey: 'running' },
       workoutSteps: steps,
+      estimatedDurationInSecs: stats.seconds > 0 ? stats.seconds : null,
+      estimatedDistanceInMeters: stats.meters > 0 ? Math.round(stats.meters) : null,
     }],
   };
 }
@@ -196,7 +202,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'El campo "workout" es requerido.' });
   }
   if (!accessToken || typeof accessToken !== 'string') {
-    return res.status(400).json({ error: 'Token de Garmin requerido. Reconect\u00e1 tu cuenta.' });
+    return res.status(400).json({ error: 'Token de Garmin requerido. Reconectá tu cuenta.' });
   }
 
   try {
@@ -219,7 +225,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (uploadRes.status === 401) {
       return res.status(401).json({
-        error: 'Token de Garmin expirado o inv\u00e1lido. Reconect\u00e1 tu cuenta desde la configuraci\u00f3n.',
+        error: 'Token de Garmin expirado o inválido. Reconectá tu cuenta desde la configuración.',
       });
     }
     if (!uploadRes.ok) {
@@ -232,7 +238,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       uploadData = JSON.parse(uploadText);
     } catch {
-      return res.status(502).json({ error: 'Respuesta inv\u00e1lida de Garmin.' });
+      return res.status(502).json({ error: 'Respuesta inválida de Garmin.' });
     }
 
     const workoutId = (uploadData.workoutId ?? 0) as number;
