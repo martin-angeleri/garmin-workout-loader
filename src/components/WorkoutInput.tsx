@@ -47,10 +47,6 @@ export default function WorkoutInput({ onParse, loading, value, onChange }: Prop
         </h2>
       </div>
 
-      <p className="text-sm mb-4" style={{ color: '#666' }}>
-        Escribí el entrenamiento como de costumbre, en español. La IA lo va a interpretar y convertir al formato de Garmin.
-      </p>
-
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="relative">
           <textarea
@@ -84,8 +80,8 @@ export default function WorkoutInput({ onParse, loading, value, onChange }: Prop
           onMouseLeave={e => (e.currentTarget.style.color = '#666')}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
-               style={{ transform: showExamples ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
-            <path d="M7 10l5 5 5-5z"/>
+            style={{ transform: showExamples ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
+            <path d="M7 10l5 5 5-5z" />
           </svg>
           Ver ejemplos de entrenamiento
         </button>
@@ -103,7 +99,7 @@ export default function WorkoutInput({ onParse, loading, value, onChange }: Prop
                 onMouseLeave={e => (e.currentTarget.style.borderColor = '#2A2A2C')}
               >
                 <p className="text-xs font-semibold mb-1.5 transition-colors"
-                   style={{ color: '#E91E8C' }}>
+                  style={{ color: '#E91E8C' }}>
                   {ex.label}
                 </p>
                 <pre className="text-xs whitespace-pre-wrap leading-relaxed" style={{ color: '#888', fontFamily: 'inherit' }}>
@@ -129,14 +125,14 @@ export default function WorkoutInput({ onParse, loading, value, onChange }: Prop
           {loading ? (
             <>
               <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="30"/>
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="30" />
               </svg>
               Interpretando con IA...
             </>
           ) : (
             <>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="white"/>
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="white" />
               </svg>
               Interpretar entrenamiento
             </>

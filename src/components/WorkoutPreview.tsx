@@ -295,7 +295,7 @@ function RepeatGroupCard({
 }: {
   group: ParsedRepeatGroup;
   blockLabel: string;
-  onCorrect: (instruction: string) => void;
+  onCorrect?: (instruction: string) => void;
   editingThis: boolean;
   onStartEdit: () => void;
   onCancelEdit: () => void;
@@ -317,21 +317,23 @@ function RepeatGroupCard({
             </span>
           </div>
           {/* AI Edit button */}
-          <button
-            onClick={onStartEdit}
-            title="Corregir este bloque con IA"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
-            style={{
-              background: editingThis ? 'rgba(233,30,140,0.25)' : 'rgba(233,30,140,0.12)',
-              color: '#E91E8C',
-              border: '1px solid rgba(233,30,140,0.3)',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.25)'; }}
-            onMouseLeave={e => { if (!editingThis) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.12)'; }}
-          >
-            <AIEditIcon />
-            <span>Editar</span>
-          </button>
+          {onCorrect && (
+            <button
+              onClick={onStartEdit}
+              title="Corregir este bloque con IA"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+              style={{
+                background: editingThis ? 'rgba(233,30,140,0.25)' : 'rgba(233,30,140,0.12)',
+                color: '#E91E8C',
+                border: '1px solid rgba(233,30,140,0.3)',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.25)'; }}
+              onMouseLeave={e => { if (!editingThis) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(233,30,140,0.12)'; }}
+            >
+              <AIEditIcon />
+              <span>Editar</span>
+            </button>
+          )}
         </div>
         {/* Steps inside */}
         <div className="p-3 space-y-2" style={{ background: '#131315' }}>
@@ -340,7 +342,7 @@ function RepeatGroupCard({
           ))}
         </div>
       </div>
-      {editingThis && (
+      {editingThis && onCorrect && (
         <CorrectionPanel
           blockLabel={blockLabel}
           onSubmit={onCorrect}
@@ -355,23 +357,38 @@ function RepeatGroupCard({
 
 interface Props {
   workout: ParsedWorkout;
-  onNameChange: (name: string) => void;
-  onUpload: () => void;
+  onNameChange?: (name: string) => void;
+  onUpload?: () => void;
   onBack: () => void;
-  onCorrect: (instruction: string) => void;
-  correcting: boolean;
-  uploading: boolean;
+  onCorrect?: (instruction: string) => void;
+  correcting?: boolean;
+  uploading?: boolean;
   email: string;
+  readOnly?: boolean;
 }
 
-export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack, onCorrect, correcting, uploading, email }: Props) {
+export default function WorkoutPreview({
+  workout,
+  onNameChange,
+  onUpload,
+  onBack,
+  onCorrect,
+  correcting = false,
+  uploading = false,
+  email,
+  readOnly = false,
+}: Props) {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(workout.name);
   // Tracks which block index (0-based) is currently being edited; null = none
   const [editingBlock, setEditingBlock] = useState<number | null>(null);
 
+  useEffect(() => {
+    setNameInput(workout.name);
+  }, [workout.name]);
+
   const saveNameEdit = () => {
-    if (nameInput.trim()) onNameChange(nameInput.trim());
+    if (nameInput.trim() && onNameChange) onNameChange(nameInput.trim());
     setEditingName(false);
   };
 
@@ -418,12 +435,26 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
           onMouseLeave={e => (e.currentTarget.style.color = '#666')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-          Editar texto
+          {readOnly ? 'Volver a la lista' : 'Editar texto'}
         </button>
         <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full"
-             style={{ background: 'rgba(48,209,88,0.1)', color: '#30D158', border: '1px solid rgba(48,209,88,0.2)' }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-          Interpretado
+             style={{
+               background: readOnly ? 'rgba(10,132,255,0.1)' : 'rgba(48,209,88,0.1)',
+               color: readOnly ? '#0A84FF' : '#30D158',
+               border: readOnly ? '1px solid rgba(10,132,255,0.2)' : '1px solid rgba(48,209,88,0.2)'
+             }}
+        >
+          {readOnly ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 10h3l-4 4-4-4h3V8h2v4z"/></svg>
+              En Garmin Connect
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+              Interpretado
+            </>
+          )}
         </div>
       </div>
 
@@ -451,16 +482,18 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
             <h3 className="text-xl font-bold truncate" style={{ color: '#E8E8EA' }}>
               {workout.name}
             </h3>
-            <button onClick={() => setEditingName(true)}
-                    className="shrink-0 p-1.5 rounded-lg transition-colors"
-                    style={{ color: '#555' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = '#FF6900')}
-                    onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
+            {!readOnly && (
+              <button onClick={() => setEditingName(true)}
+                      className="shrink-0 p-1.5 rounded-lg transition-colors"
+                      style={{ color: '#555' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = '#FF6900')}
+                      onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+            )}
           </div>
         )}
         <div className="flex items-center gap-3 mt-2 flex-wrap">
@@ -523,9 +556,9 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
                 <RepeatGroupCard
                   group={step}
                   blockLabel={blockLabel}
-                  onCorrect={(instruction) => {
+                  onCorrect={readOnly ? undefined : (instruction) => {
                     setEditingBlock(null);
-                    onCorrect(instruction);
+                    if (onCorrect) onCorrect(instruction);
                   }}
                   editingThis={isEditing}
                   onStartEdit={startEdit}
@@ -535,9 +568,9 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
                 <StepCard
                   step={step}
                   blockLabel={blockLabel}
-                  onCorrect={(instruction) => {
+                  onCorrect={readOnly ? undefined : (instruction) => {
                     setEditingBlock(null);
-                    onCorrect(instruction);
+                    if (onCorrect) onCorrect(instruction);
                   }}
                   editingThis={isEditing}
                   onStartEdit={startEdit}
@@ -549,48 +582,65 @@ export default function WorkoutPreview({ workout, onNameChange, onUpload, onBack
         })}
       </div>
 
-      {/* Upload button */}
-      <div className="rounded-2xl p-4 sm:p-5" style={{ background: '#141416', border: '1px solid #2A2A2C' }}>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
-               style={{ background: 'rgba(233,30,140,0.15)', fontSize: '20px' }}>
-            ⌚
-          </div>
-          <div>
-            <p className="text-sm font-semibold" style={{ color: '#E8E8EA' }}>Subir a Garmin Connect</p>
-            <p className="text-xs" style={{ color: '#555' }}>Cuenta: {email}</p>
-          </div>
+      {/* Upload button or back button if readOnly */}
+      {readOnly ? (
+        <div className="pt-2">
+          <button
+            onClick={onBack}
+            className="w-full py-4 rounded-xl text-base font-bold transition-all flex items-center justify-center gap-2"
+            style={{
+              background: 'linear-gradient(135deg, #2A2A2C 0%, #1E1E20 100%)',
+              border: '1px solid #3E3E40',
+              color: '#E8E8EA',
+              cursor: 'pointer',
+            }}
+          >
+            Volver a la lista
+          </button>
         </div>
+      ) : (
+        <div className="rounded-2xl p-4 sm:p-5" style={{ background: '#141416', border: '1px solid #2A2A2C' }}>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
+                 style={{ background: 'rgba(233,30,140,0.15)', fontSize: '20px' }}>
+              ⌚
+            </div>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: '#E8E8EA' }}>Subir a Garmin Connect</p>
+              <p className="text-xs" style={{ color: '#555' }}>Cuenta: {email}</p>
+            </div>
+          </div>
 
-        <button
-          onClick={onUpload}
-          disabled={uploading}
-          className="w-full py-4 rounded-xl text-base font-bold transition-all flex items-center justify-center gap-2.5"
-          style={{
-            background: uploading ? '#2A2A2C' : 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)',
-            color: uploading ? '#555' : '#fff',
-            cursor: uploading ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {uploading ? (
-            <>
-              <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="30"/>
-              </svg>
-              Subiendo a Garmin Connect...
-            </>
-          ) : (
-            <>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              Subir workout a Garmin Connect
-            </>
-          )}
-        </button>
-      </div>
+          <button
+            onClick={onUpload}
+            disabled={uploading}
+            className="w-full py-4 rounded-xl text-base font-bold transition-all flex items-center justify-center gap-2.5"
+            style={{
+              background: uploading ? '#2A2A2C' : 'linear-gradient(135deg, #B8006C 0%, #E91E8C 100%)',
+              color: uploading ? '#555' : '#fff',
+              cursor: uploading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {uploading ? (
+              <>
+                <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="30"/>
+                </svg>
+                Subiendo a Garmin Connect...
+              </>
+            ) : (
+              <>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Subir workout a Garmin Connect
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

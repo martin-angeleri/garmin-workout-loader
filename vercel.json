@@ -9,6 +9,9 @@
     "api/parse-workout.ts": { "maxDuration": 30 },
     "api/upload-workout.ts": { "maxDuration": 30 },
     "api/connect-garmin.ts": { "maxDuration": 30 },
+    "api/list-workouts.ts": { "maxDuration": 15 },
+    "api/get-workout.ts": { "maxDuration": 15 },
+    "api/delete-workout.ts": { "maxDuration": 15 },
     "api/debug.ts": { "maxDuration": 10 }
   }
 }

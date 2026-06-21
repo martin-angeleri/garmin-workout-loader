@@ -115,9 +115,24 @@ export interface GarminWorkout {
 
 export interface GarminCredentials {
   email: string;
+  password?: string;
   accessToken: string;
   /** Unix timestamp (ms) cuando expira el token */
   tokenExpiresAt: number;
+}
+
+export interface UserWorkout {
+  workoutId: number;
+  workoutName: string;
+  description: string | null;
+  sportType: {
+    sportTypeId: number;
+    sportTypeKey: string;
+  };
+  createdDate: string;
+  updatedDate: string;
+  estimatedDurationInSecs?: number | null;
+  estimatedDistanceInMeters?: number | null;
 }
 
 export type AppStatus =
@@ -132,3 +147,4 @@ export interface UploadResult {
   workoutId: number;
   workoutName: string;
 }
+

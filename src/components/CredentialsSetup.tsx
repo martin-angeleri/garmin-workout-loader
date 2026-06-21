@@ -61,7 +61,12 @@ export default function CredentialsSetup({
         return;
       }
 
-      onSave({ email: email.trim(), accessToken: data.accessToken, tokenExpiresAt: data.expiresAt });
+      onSave({
+        email: email.trim(),
+        password: password.trim(),
+        accessToken: data.accessToken,
+        tokenExpiresAt: data.expiresAt,
+      });
     } catch {
       setError('Error de red. Verificá tu conexión e intentá de nuevo.');
     } finally {
