@@ -196,7 +196,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { workout, accessToken } = req.body ?? {};
+  const { workout, accessToken, date } = req.body ?? {};
 
   if (!workout || typeof workout !== 'object') {
     return res.status(400).json({ error: 'El campo "workout" es requerido.' });
@@ -242,6 +242,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const workoutId = (uploadData.workoutId ?? 0) as number;
+
+    if (date && typeof date === 'string') {
+      console.log(`[upload-workout] Programando workout ${workoutId} para la fecha ${date}`);
+      try {
+        const scheduleRes = await fetch(`${GC_API}/workout-service/schedule/${workoutId}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'NK': 'NT',
+            'di-backend': 'connectapi.garmin.com',
+          },
+          body: JSON.stringify({ date }),
+        });
+        const scheduleText = await scheduleRes.text();
+        console.log('[upload-workout] Garmin schedule response:', scheduleRes.status, scheduleText.slice(0, 200));
+        if (!scheduleRes.ok) {
+          console.warn('[upload-workout] Falló la programación en el calendario:', scheduleRes.status, scheduleText);
+        }
+      } catch (scheduleErr) {
+        console.error('[upload-workout] Error al programar en el calendario:', scheduleErr);
+      }
+    }
+
     return res.status(200).json({ workoutId, workoutName: garminWorkout.workoutName });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -126,12 +126,18 @@ export default function App() {
     setStatus('uploading');
     setErrorMessage('');
     try {
+      const today = new Date();
+      const offset = today.getTimezoneOffset();
+      const localDate = new Date(today.getTime() - (offset * 60 * 1000));
+      const dateStr = localDate.toISOString().split('T')[0];
+
       const res = await fetch('/api/upload-workout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workout: parsedWorkout,
           accessToken: credentials.accessToken,
+          date: dateStr,
         }),
       });
       const rawText = await res.text();
