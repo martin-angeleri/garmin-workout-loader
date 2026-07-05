@@ -3,16 +3,25 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:api": "tsc -p tsconfig.api.json",
     "lint": "eslint .",
     "preview": "vite preview",
-    "vercel-build": "vite build"
+    "vercel-build": "vite build",
+    "cap:sync": "npx cap sync",
+    "cap:open-ios": "npx cap open ios",
+    "cap:open-android": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
     "@tailwindcss/vite": "^4.2.2",
     "@vercel/node": "^5.7.4",
     "autoprefixer": "^10.5.0",
